@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications - Colegio de Muntinlupa</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+    <script>
+        // Check if user is logged in
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+
+    <div class="sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                👤
+            </div>
+            <div class="sidebar-user-info">
+                <p class="sidebar-user-name" id="sidebarUserName">Loading...</p>
+                <p class="sidebar-user-role" id="sidebarUserRole">Loading...</p>
+                <p class="sidebar-user-fullname" id="sidebarUserFullName">Loading...</p>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="sidebar-item" onclick="window.location.href='dashboard.html'">
+                <i>🏠</i>
+                <span>Home</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='inventory.html'">
+                <i>📦</i>
+                <span>Inventory</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='user-activity.html'">
+                <i>👥</i>
+                <span>User Activity</span>
+            </div>
+            <div class="sidebar-item active">
+                <i>🔔</i>
+                <span>Notifications</span>
+                <span class="notification-badge"></span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-item" onclick="logout()">
+                <i>🚪</i>
+                <span>Logout</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="user-info">
+                <img src="school_logo.png" alt="School Logo">
+                <span>NOTIFICATIONS</span>
+            </div>
+
+            <div class="flag-stripes">
+                <div class="stripe yellow"></div>
+                <div class="stripe red"></div>
+                <div class="stripe blue"></div>
+            </div>
+        </div>
+
+        <div class="notifications-container">
+            <div class="notifications-header">
+                <h2>Notifications</h2>
+                <button onclick="markAllNotificationsAsRead()" class="action-button">Mark All as Read</button>
+            </div>
+            
+            <div class="notifications-list" id="notificationsList">
+                <!-- Notifications will be dynamically populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+        // Function to format role text
+        function formatRole(role) {
+            switch(role) {
+                case 'department_head':
+                    return 'Department Head';
+                case 'logistic_officer':
+                    return 'Logistic Officer';
+                case 'member':
+                    return 'Member';
+                default:
+                    return role;
+            }
+        }
+
+        // Function to display notifications
+        function displayNotifications() {
+            const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
+            const container = document.getElementById('notificationsList');
+            container.innerHTML = '';
+
+            if (notifications.length === 0) {
+                container.innerHTML = '<div class="no-notifications">No notifications available</div>';
+                return;
+            }
+
+            // Sort notifications by timestamp in descending order (newest first)
+            notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            notifications.forEach(notification => {
+                const notificationElement = document.createElement('div');
+                notificationElement.className = `notification-item ${notification.read ? 'read' : 'unread'}`;
+                
+                let detailsHtml = '';
+                if (notification.type === 'low_stock') {
+                    detailsHtml = `
+                        <div class="notification-details">
+                            <p>Item: ${notification.details.itemName}</p>
+                            <p>Current Quantity: ${notification.details.currentQuantity}</p>
+                            <p>Category: ${notification.details.category}</p>
+                        </div>
+                    `;
+                } else if (notification.type === 'out_of_stock') {
+                    detailsHtml = `
+                        <div class="notification-details">
+                            <p>Item: ${notification.details.itemName}</p>
+                            <p>Category: ${notification.details.category}</p>
+                            <p>Status: Out of Stock</p>
+                        </div>
+                    `;
+                }
+
+                notificationElement.innerHTML = `
+                    <div class="notification-content">
+                        <div class="notification-header">
+                            <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
+                                                                                notification.type === 'out_of_stock' ? 'Out of Stock' : 
+                                                                                notification.type}</span>
+                            <span class="notification-time">${new Date(notification.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p class="notification-message">${notification.message}</p>
+                        ${detailsHtml}
+                    </div>
+                    ${!notification.read ? `<button onclick="markNotificationAsRead(${notification.id})" class="mark-read-button">Mark as Read</button>` : ''}
+                `;
+
+                container.appendChild(notificationElement);
+            });
+        }
+
+        // Function to update user info in sidebar
+        function updateUserInfo() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+            }
+        }
+
+        // Initialize notifications display
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserInfo();
+            displayNotifications();
+            markAllNotificationsAsRead(); // Mark all as read when viewing the page
+        });
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html> 

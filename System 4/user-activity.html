@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Activity - Colegio de Muntinlupa</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+    <script>
+        // Check if user is logged in
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+
+    <div class="sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                👤
+            </div>
+            <div class="sidebar-user-info">
+                <p class="sidebar-user-name" id="sidebarUserName">Loading...</p>
+                <p class="sidebar-user-role" id="sidebarUserRole">Loading...</p>
+                <p class="sidebar-user-fullname" id="sidebarUserFullName">Loading...</p>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="sidebar-item" onclick="window.location.href='dashboard.html'">
+                <i>🏠</i>
+                <span>Home</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='inventory.html'">
+                <i>📦</i>
+                <span>Inventory</span>
+            </div>
+            <div class="sidebar-item active">
+                <i>👥</i>
+                <span>User Activity</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='notifications.html'">
+                <i>🔔</i>
+                <span>Notifications</span>
+                <span class="notification-badge"></span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-item" onclick="logout()">
+                <i>🚪</i>
+                <span>Logout</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="user-info">
+                <img src="school_logo.png" alt="School Logo">
+                <span>USER ACTIVITY LOG</span>
+            </div>
+
+            <div class="flag-stripes">
+                <div class="stripe yellow"></div>
+                <div class="stripe red"></div>
+                <div class="stripe blue"></div>
+            </div>
+        </div>
+
+        <div class="activity-controls">
+            <div class="search-filters">
+                <input type="text" id="searchInput" placeholder="Search activities..." class="search-input">
+                <select id="actionFilter" class="filter-select">
+                    <option value="">All Actions</option>
+                    <option value="add">Add</option>
+                    <option value="edit">Edit</option>
+                    <option value="delete">Delete</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="activity-table-container">
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Username</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="activityTableBody">
+                    <!-- Table rows will be dynamically populated -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+        // Function to format role text
+        function formatRole(role) {
+            switch(role) {
+                case 'department_head':
+                    return 'Department Head';
+                case 'logistic_officer':
+                    return 'Logistic Officer';
+                case 'member':
+                    return 'Member';
+                default:
+                    return role;
+            }
+        }
+
+        // Function to update user info in sidebar
+        function updateUserInfo() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+            }
+        }
+
+        // Function to format timestamp
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        // Function to update activity table
+        function updateActivityTable(activities = []) {
+            const tbody = document.getElementById('activityTableBody');
+            tbody.innerHTML = '';
+            
+            activities.forEach(activity => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatTimestamp(activity.timestamp)}</td>
+                    <td>${activity.username}</td>
+                    <td><span class="activity-badge ${activity.action}">${activity.action}</span></td>
+                    <td>${activity.details}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Function to load activities
+        function loadActivities() {
+            const activities = JSON.parse(localStorage.getItem('userActivities')) || [];
+            updateActivityTable(activities);
+        }
+
+        // Search and filter functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const actionFilter = document.getElementById('actionFilter').value;
+            const activities = JSON.parse(localStorage.getItem('userActivities')) || [];
+            
+            const filteredActivities = activities.filter(activity => {
+                const matchesSearch = 
+                    activity.username.toLowerCase().includes(searchTerm) ||
+                    activity.details.toLowerCase().includes(searchTerm);
+                const matchesAction = !actionFilter || activity.action === actionFilter;
+                return matchesSearch && matchesAction;
+            });
+            
+            updateActivityTable(filteredActivities);
+        });
+
+        document.getElementById('actionFilter').addEventListener('change', function() {
+            document.getElementById('searchInput').dispatchEvent(new Event('input'));
+        });
+
+        // Load activities on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserInfo();
+            loadActivities();
+        });
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html> 

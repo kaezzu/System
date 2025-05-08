@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management - Colegio de Muntinlupa</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+    <script>
+        // Check if user is logged in
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+
+    <div class="sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                👤
+            </div>
+            <div class="sidebar-user-info">
+                <p class="sidebar-user-name" id="sidebarUserName">Loading...</p>
+                <p class="sidebar-user-role" id="sidebarUserRole">Loading...</p>
+                <p class="sidebar-user-fullname" id="sidebarUserFullName">Loading...</p>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="sidebar-item" onclick="window.location.href='dashboard.html'">
+                <i>🏠</i>
+                <span>Home</span>
+            </div>
+            <div class="sidebar-item active" onclick="window.location.href='inventory.html'">
+                <i>📦</i>
+                <span>Inventory</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='user-activity.html'">
+                <i>👥</i>
+                <span>User Activity</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='notifications.html'">
+                <i>🔔</i>
+                <span>Notifications</span>
+                <span class="notification-badge"></span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-item" onclick="logout()">
+                <i>🚪</i>
+                <span>Logout</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="user-info">
+                <img src="school_logo.png" alt="School Logo">
+                <span>INVENTORY MANAGEMENT</span>
+            </div>
+
+            <div class="flag-stripes">
+                <div class="stripe yellow"></div>
+                <div class="stripe red"></div>
+                <div class="stripe blue"></div>
+            </div>
+        </div>
+
+        <div class="inventory-controls">
+            <button onclick="showAddItemModal()" class="action-button" id="addItemButton">+ Add New Item</button>
+            <div class="search-filters">
+                <input type="text" id="searchInput" placeholder="Search items..." class="search-input">
+                <select id="categoryFilter" class="filter-select">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="inventory-table-container">
+            <table class="inventory-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                        <th>Quality</th>
+                        <th>Expiration Date</th>
+                        <th>Last Updated</th>
+                        <th class="actions-column">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryTableBody">
+                    <!-- Table rows will be dynamically populated -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add/Edit Item Modal -->
+    <div id="itemModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Add New Item</h2>
+            <form id="itemForm" onsubmit="handleItemSubmit(event)">
+                <input type="text" id="itemName" placeholder="Item Name" required>
+                <div class="category-selector">
+                    <select id="itemCategory" required>
+                        <option value="">Select Category</option>
+                    </select>
+                    <button type="button" class="action-button" onclick="showAddCategoryModal()">+ Add Category</button>
+                </div>
+                <input type="number" id="itemQuantity" placeholder="Quantity" required min="0">
+                <input type="date" id="itemExpiration" placeholder="Expiration Date">
+                <select id="itemQuality" required>
+                    <option value="">Select Quality</option>
+                    <option value="New">New</option>
+                    <option value="Used">Used</option>
+                    <option value="Poor">Poor</option>
+                </select>
+                <button type="submit" class="action-button">Save Item</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div id="categoryModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeCategoryModal()">&times;</span>
+            <h2>Add New Category</h2>
+            <form id="categoryForm" onsubmit="handleCategorySubmit(event)">
+                <input type="text" id="newCategoryName" placeholder="Category Name" required>
+                <button type="submit" class="action-button">Add Category</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script src="inventory.js"></script>
+    <script>
+        // Function to format role text
+        function formatRole(role) {
+            switch(role) {
+                case 'department_head':
+                    return 'Department Head';
+                case 'logistic_officer':
+                    return 'Logistic Officer';
+                case 'member':
+                    return 'Member';
+                default:
+                    return role;
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            window.location.href = 'index.html';
+        }
+
+        // Function to update user info in sidebar
+        function updateUserInfo() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserInfo();
+        });
+    </script>
+</body>
+</html> 

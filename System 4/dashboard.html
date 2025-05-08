@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Colegio de Muntinlupa</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+    <script>
+        // Check if user is logged in
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+
+    <div class="sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="sidebar-user-info">
+                <h3 class="sidebar-user-name">Admin</h3>
+                <p class="sidebar-user-role">Administrator</p>
+                <p class="sidebar-user-fullname">John Doe</p>
+            </div>
+        </div>
+        
+        <div class="sidebar-nav">
+            <!-- Main Section -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Main</div>
+                <a href="dashboard.html" class="sidebar-item active">
+                    <i class="fas fa-home"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="inventory.html" class="sidebar-item">
+                    <i class="fas fa-boxes"></i>
+                    <span>Inventory</span>
+                </a>
+                <a href="borrowed.html" class="sidebar-item">
+                    <i class="fas fa-hand-holding"></i>
+                    <span>Borrowed Items</span>
+                </a>
+            </div>
+
+            <!-- Management Section -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Management</div>
+                <a href="suppliers.html" class="sidebar-item">
+                    <i class="fas fa-truck"></i>
+                    <span>Suppliers</span>
+                </a>
+                <a href="categories.html" class="sidebar-item">
+                    <i class="fas fa-tags"></i>
+                    <span>Categories</span>
+                </a>
+                <a href="users.html" class="sidebar-item">
+                    <i class="fas fa-users"></i>
+                    <span>Users</span>
+                </a>
+            </div>
+
+            <!-- Communication Section -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Communication</div>
+                <a href="notes.html" class="sidebar-item">
+                    <i class="fas fa-sticky-note"></i>
+                    <span>Notes</span>
+                </a>
+                <a href="notifications.html" class="sidebar-item">
+                    <i class="fas fa-bell"></i>
+                    <span>Notifications</span>
+                    <span class="notification-badge">3</span>
+                </a>
+                <a href="reports.html" class="sidebar-item">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Reports</span>
+                </a>
+            </div>
+
+            <!-- Settings Section -->
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Settings</div>
+                <a href="profile.html" class="sidebar-item">
+                    <i class="fas fa-user-cog"></i>
+                    <span>Profile</span>
+                </a>
+                <a href="settings.html" class="sidebar-item">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <a href="help.html" class="sidebar-item">
+                <i class="fas fa-question-circle"></i>
+                <span>Help & Support</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </a>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="user-info">
+                <img src="school_logo.png" alt="School Logo">
+                <span>EMERGENCY RESPONSE TEAM INVENTORY MANAGEMENT SYSTEM</span>
+            </div>
+
+            <!--
+            <div class="logo">
+                <img src="school_logo.png" alt="School Logo">
+            </div>
+            -->
+
+            <div class="flag-stripes">
+                <div class="stripe yellow"></div>
+                <div class="stripe red"></div>
+                <div class="stripe blue"></div>
+            </div>
+        </div>
+
+        <div class="dashboard-container">
+            <div class="card clickable" onclick="window.location.href='inventory.html'">
+                <div class="card-icon">📦</div>
+                <div class="card-label">INVENTORY</div>
+            </div>
+            <div class="card clickable" onclick="window.location.href='borrowed.html'">
+                <div class="card-icon">📝</div>
+                <div class="card-label">BORROWED ITEMS</div>
+            </div>
+            <div class="card clickable" onclick="window.location.href='notes.html'">
+                <div class="card-icon">📌</div>
+                <div class="card-label">NOTES</div>
+            </div>
+            <div class="card clickable" onclick="window.location.href='supplier.html'">
+                <div class="card-icon">🏢</div>
+                <div class="card-label">SUPPLIER</div>
+            </div>
+        </div>
+
+        <div class="dashboard-bottom-container">
+            <!-- Recent Activities Section -->
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>Recent Activities</h2>
+                    <button onclick="window.location.href='user-activity.html'" class="view-all-button">View All</button>
+                </div>
+                <div class="activity-list" id="recentActivities">
+                    <!-- Recent activities will be populated here -->
+                </div>
+            </div>
+
+            <!-- Recent Notifications Section -->
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>Notifications</h2>
+                    <button onclick="window.location.href='notifications.html'" class="view-all-button">View All</button>
+                </div>
+                <div class="notification-list" id="recentNotifications">
+                    <!-- Recent notifications will be populated here -->
+                </div>
+            </div>
+
+            <!-- Recent Notes Section -->
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>Recent Notes</h2>
+                    <div class="section-actions">
+                        <button onclick="showQuickNoteModal()" class="quick-add-button">+ Quick Note</button>
+                        <button onclick="window.location.href='notes.html'" class="view-all-button">View All</button>
+                    </div>
+                </div>
+                <div class="notes-list" id="recentNotes">
+                    <!-- Recent notes will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Note Modal -->
+    <div id="quickNoteModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeQuickNoteModal()">&times;</span>
+            <h2>Add Quick Note</h2>
+            <form id="quickNoteForm" onsubmit="handleQuickNoteSubmit(event)">
+                <div class="form-group">
+                    <div class="form-field required">
+                        <label for="quickNoteTitle">Title</label>
+                        <div class="input-icon">
+                            <i>📝</i>
+                            <input type="text" id="quickNoteTitle" placeholder="Enter note title" required>
+                        </div>
+                        <div class="error-message">Please enter a title</div>
+                    </div>
+
+                    <div class="form-field required">
+                        <label for="quickNoteContent">Content</label>
+                        <div class="input-icon">
+                            <i>📄</i>
+                            <textarea id="quickNoteContent" placeholder="Enter note content" required rows="4"></textarea>
+                        </div>
+                        <div class="error-message">Please enter note content</div>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="quickNotePriority">Priority Level</label>
+                        <div class="input-icon">
+                            <i>🔔</i>
+                            <select id="quickNotePriority">
+                                <option value="low">Low Priority</option>
+                                <option value="medium">Medium Priority</option>
+                                <option value="high">High Priority</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="action-button submit-button">
+                        <span class="button-text">Save Note</span>
+                        <div class="loading-spinner"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script>
+        // Function to format role text
+        function formatRole(role) {
+            switch(role) {
+                case 'department_head':
+                    return 'Department Head';
+                case 'logistic_officer':
+                    return 'Logistic Officer';
+                case 'member':
+                    return 'Member';
+                default:
+                    return role;
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            window.location.href = 'index.html';
+        }
+
+        // Function to update user info in sidebar
+        function updateUserInfo() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+            }
+        }
+
+        // Function to format timestamp
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        // Function to display recent activities
+        function displayRecentActivities() {
+            const activities = JSON.parse(localStorage.getItem('userActivities')) || [];
+            const recentActivities = activities.slice(0, 5); // Get 5 most recent activities
+            const container = document.getElementById('recentActivities');
+            
+            if (recentActivities.length === 0) {
+                container.innerHTML = '<div class="no-data">No recent activities</div>';
+                return;
+            }
+
+            container.innerHTML = recentActivities.map(activity => `
+                <div class="activity-item">
+                    <div class="activity-header">
+                        <span class="activity-badge ${activity.action}">${activity.action}</span>
+                        <span class="activity-time">${formatTimestamp(activity.timestamp)}</span>
+                    </div>
+                    <div class="activity-details">
+                        <span class="activity-user">${activity.username}</span>
+                        <span class="activity-description">${activity.details}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Function to display recent notifications
+        function displayRecentNotifications() {
+            const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
+            
+            // Sort notifications by timestamp in descending order (newest first)
+            notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            const recentNotifications = notifications.slice(0, 5); // Get 5 most recent notifications
+            const container = document.getElementById('recentNotifications');
+            
+            if (recentNotifications.length === 0) {
+                container.innerHTML = '<div class="no-data">No notifications</div>';
+                return;
+            }
+
+            container.innerHTML = recentNotifications.map(notification => `
+                <div class="notification-item ${notification.read ? 'read' : 'unread'}">
+                    <div class="notification-content">
+                        <div class="notification-header">
+                            <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
+                                                                                notification.type === 'out_of_stock' ? 'Out of Stock' : 
+                                                                                notification.type}</span>
+                            <span class="notification-time">${formatTimestamp(notification.timestamp)}</span>
+                        </div>
+                        <p class="notification-message">${notification.message}</p>
+                        ${notification.type === 'low_stock' || notification.type === 'out_of_stock' ? `
+                            <div class="notification-details">
+                                <p>Item: ${notification.details.itemName}</p>
+                                <p>Category: ${notification.details.category}</p>
+                                ${notification.type === 'low_stock' ? `<p>Current Quantity: ${notification.details.currentQuantity}</p>` : 
+                                                                      `<p>Status: Out of Stock</p>`}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Function to display recent notes
+        function displayRecentNotes() {
+            const notes = JSON.parse(localStorage.getItem('notes')) || [];
+            const recentNotes = notes.slice(0, 3); // Get 3 most recent notes
+            const container = document.getElementById('recentNotes');
+            
+            if (recentNotes.length === 0) {
+                container.innerHTML = '<div class="no-data">No notes available</div>';
+                return;
+            }
+
+            container.innerHTML = recentNotes.map(note => `
+                <div class="note-item ${getPriorityClass(note.priority)}">
+                    <div class="note-header">
+                        <h3>${note.title}</h3>
+                        <span class="note-priority">${formatPriority(note.priority)}</span>
+                    </div>
+                    <div class="note-preview">${truncateText(note.content, 100)}</div>
+                    <div class="note-footer">
+                        <span class="note-author">By ${note.authorFullName}</span>
+                        <span class="note-date">${formatTimestamp(note.createdAt)}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Helper functions for notes
+        function getPriorityClass(priority) {
+            switch(priority) {
+                case 'high': return 'priority-high';
+                case 'medium': return 'priority-medium';
+                case 'low': return 'priority-low';
+                default: return '';
+            }
+        }
+
+        function formatPriority(priority) {
+            return priority.charAt(0).toUpperCase() + priority.slice(1) + ' Priority';
+        }
+
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substr(0, maxLength) + '...';
+        }
+
+        // Quick Note Modal Functions
+        function showQuickNoteModal() {
+            const modal = document.getElementById('quickNoteModal');
+            modal.style.display = 'block';
+            document.getElementById('quickNoteTitle').focus();
+        }
+
+        function closeQuickNoteModal() {
+            const modal = document.getElementById('quickNoteModal');
+            modal.style.display = 'none';
+            document.getElementById('quickNoteForm').reset();
+        }
+
+        function handleQuickNoteSubmit(event) {
+            event.preventDefault();
+            
+            const titleField = document.getElementById('quickNoteTitle').parentElement.parentElement;
+            const contentField = document.getElementById('quickNoteContent').parentElement.parentElement;
+            const submitButton = event.target.querySelector('.submit-button');
+            
+            titleField.classList.remove('error');
+            contentField.classList.remove('error');
+            
+            const title = document.getElementById('quickNoteTitle').value.trim();
+            const content = document.getElementById('quickNoteContent').value.trim();
+            const priority = document.getElementById('quickNotePriority').value;
+            
+            let hasError = false;
+            
+            if (!title) {
+                titleField.classList.add('error');
+                hasError = true;
+            }
+            
+            if (!content) {
+                contentField.classList.add('error');
+                hasError = true;
+            }
+            
+            if (hasError) return;
+            
+            submitButton.classList.add('loading');
+            
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            
+            const note = {
+                id: Date.now(),
+                title: title,
+                content: content,
+                priority: priority,
+                author: currentUser.username,
+                authorFullName: currentUser.fullName,
+                createdAt: new Date().toLocaleString(),
+                updatedAt: new Date().toLocaleString()
+            };
+            
+            setTimeout(() => {
+                const notes = JSON.parse(localStorage.getItem('notes')) || [];
+                notes.unshift(note);
+                localStorage.setItem('notes', JSON.stringify(notes));
+                
+                logActivity('note', `${currentUser.username} created a new note: ${title}`);
+                
+                displayRecentNotes();
+                closeQuickNoteModal();
+                
+                showSuccessMessage('Note created successfully!');
+                
+                submitButton.classList.remove('loading');
+            }, 500);
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserInfo();
+            displayRecentActivities();
+            displayRecentNotifications();
+            displayRecentNotes();
+        });
+    </script>
+</body>
+</html>

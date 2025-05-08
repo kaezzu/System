@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes - Colegio de Muntinlupa</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+    <script>
+        // Check if user is logged in
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+
+    <div class="sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                👤
+            </div>
+            <div class="sidebar-user-info">
+                <p class="sidebar-user-name" id="sidebarUserName">Loading...</p>
+                <p class="sidebar-user-role" id="sidebarUserRole">Loading...</p>
+                <p class="sidebar-user-fullname" id="sidebarUserFullName">Loading...</p>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="sidebar-item" onclick="window.location.href='dashboard.html'">
+                <i>🏠</i>
+                <span>Home</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='inventory.html'">
+                <i>📦</i>
+                <span>Inventory</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='borrowed.html'">
+                <i>📝</i>
+                <span>Borrowed Items</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='user-activity.html'">
+                <i>👥</i>
+                <span>User Activity</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='notifications.html'">
+                <i>🔔</i>
+                <span>Notifications</span>
+                <span class="notification-badge"></span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-item" onclick="logout()">
+                <i>🚪</i>
+                <span>Logout</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="user-info">
+                <img src="school_logo.png" alt="School Logo">
+                <span>NOTES</span>
+            </div>
+
+            <div class="flag-stripes">
+                <div class="stripe yellow"></div>
+                <div class="stripe red"></div>
+                <div class="stripe blue"></div>
+            </div>
+        </div>
+
+        <div class="notes-controls">
+            <button onclick="showAddNoteModal()" class="action-button">+ Add New Note</button>
+            <div class="search-filters">
+                <input type="text" id="searchInput" placeholder="Search notes..." class="search-input">
+                <select id="filterSelect" class="filter-select">
+                    <option value="">All Notes</option>
+                    <option value="my">My Notes</option>
+                    <option value="others">Others' Notes</option>
+                    <option value="general">General</option>
+                    <option value="meeting">Meeting Notes</option>
+                    <option value="task">Task Notes</option>
+                    <option value="idea">Ideas</option>
+                </select>
+                <select id="sortSelect" class="sort-select">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="priority">Priority</option>
+                    <option value="title">Title</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="notes-container" id="notesContainer">
+            <!-- Notes will be dynamically populated here -->
+        </div>
+    </div>
+
+    <!-- Add Note Modal -->
+    <div id="noteModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeNoteModal()">&times;</span>
+            <h2>Add New Note</h2>
+            <form id="noteForm" onsubmit="handleNoteSubmit(event)">
+                <div class="form-group">
+                    <div class="form-field required">
+                        <label for="noteTitle">Title</label>
+                        <div class="input-icon">
+                            <i>📝</i>
+                            <input type="text" id="noteTitle" placeholder="Enter note title" required>
+                        </div>
+                        <div class="error-message">Please enter a title</div>
+                    </div>
+
+                    <div class="form-field required">
+                        <label for="noteContent">Content</label>
+                        <div class="input-icon">
+                            <i>📄</i>
+                            <textarea id="noteContent" placeholder="Enter note content" required rows="4"></textarea>
+                        </div>
+                        <div class="error-message">Please enter note content</div>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="notePriority">Priority Level</label>
+                        <div class="input-icon">
+                            <i>🔔</i>
+                            <select id="notePriority">
+                                <option value="low">Low Priority</option>
+                                <option value="medium">Medium Priority</option>
+                                <option value="high">High Priority</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="noteCategory">Category</label>
+                        <div class="input-icon">
+                            <i>📑</i>
+                            <select id="noteCategory">
+                                <option value="general">General</option>
+                                <option value="meeting">Meeting Notes</option>
+                                <option value="task">Task Notes</option>
+                                <option value="idea">Ideas</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="action-button submit-button">
+                        <span class="button-text">Save Note</span>
+                        <div class="loading-spinner"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script src="notes.js"></script>
+    <script>
+        function formatRole(role) {
+            switch(role) {
+                case 'department_head':
+                    return 'Department Head';
+                case 'logistic_officer':
+                    return 'Logistic Officer';
+                case 'member':
+                    return 'Member';
+                default:
+                    return role;
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            window.location.href = 'index.html';
+        }
+
+        function updateUserInfo() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserInfo();
+        });
+    </script>
+</body>
+</html> 

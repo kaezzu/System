@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Emergency Response Team Inventory Management</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <div class="login-avatar">
+                    <img src="school_logo.png" alt="School Logo">
+                </div>
+                <h1>Emergency Response Team</h1>
+                <p>Inventory Management System</p>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="input-group">
+                    <div class="input-icon">
+                        <i>👤</i>
+                        <input type="text" id="username" placeholder="Username" required>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <div class="input-icon">
+                        <i>🔒</i>
+                        <input type="password" id="password" placeholder="Password" required>
+                        <i class="toggle-password" onclick="togglePassword()">👁️</i>
+                    </div>
+                </div>
+                <div class="remember-forgot">
+                    <div class="remember-me">
+                        <input type="checkbox" id="rememberMe">
+                        <label for="rememberMe">Remember me</label>
+                    </div>
+                    <a href="forgot-password.html" class="forgot-password">Forgot Password?</a>
+                </div>
+                <button type="submit" class="login-button">
+                    Login <i>→</i>
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>Don't have an account? <a href="register.html" class="register-link">Register</a></p>
+                <p class="copyright">© 2024 Colegio De Muntinlupa. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Only initialize admin account if no users exist
+        if (!localStorage.getItem('users')) {
+            // Add default admin account
+            const defaultAdmin = {
+                fullName: 'Administrator',
+                email: 'admin@admin.com',
+                username: 'admin',
+                password: 'admin',
+                role: 'department_head',
+                createdAt: new Date().toISOString()
+            };
+            
+            const users = [defaultAdmin];
+            localStorage.setItem('users', JSON.stringify(users));
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const rememberMe = document.getElementById('rememberMe').checked;
+
+            // Basic validation
+            if (!username || !password) {
+                showError("Please enter both username and password");
+                return false;
+            }
+
+            // Get users from localStorage
+            const users = JSON.parse(localStorage.getItem('users')) || [];
+            
+            // Find user
+            const user = users.find(u => u.username === username && u.password === password);
+
+            // Special case for demo admin account
+            if (username === "admin" && password === "admin") {
+                sessionStorage.setItem('isLoggedIn', 'true');
+                sessionStorage.setItem('currentUser', JSON.stringify({
+                    username: 'admin',
+                    fullName: 'Administrator',
+                    role: 'department_head'
+                }));
+                
+                if (rememberMe) {
+                    localStorage.setItem('rememberMe', 'true');
+                    localStorage.setItem('rememberedUser', username);
+                } else {
+                    localStorage.removeItem('rememberMe');
+                    localStorage.removeItem('rememberedUser');
+                }
+                
+                // Show loading state
+                const loginButton = document.querySelector('.login-button');
+                loginButton.innerHTML = '<i>⏳</i> Logging in...';
+                loginButton.disabled = true;
+                
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 1000);
+            } else if (user) {
+                sessionStorage.setItem('isLoggedIn', 'true');
+                sessionStorage.setItem('currentUser', JSON.stringify({
+                    username: user.username,
+                    fullName: user.fullName,
+                    role: user.role
+                }));
+                
+                if (rememberMe) {
+                    localStorage.setItem('rememberMe', 'true');
+                    localStorage.setItem('rememberedUser', username);
+                } else {
+                    localStorage.removeItem('rememberMe');
+                    localStorage.removeItem('rememberedUser');
+                }
+                
+                // Show loading state
+                const loginButton = document.querySelector('.login-button');
+                loginButton.innerHTML = '<i>⏳</i> Logging in...';
+                loginButton.disabled = true;
+                
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 1000);
+            } else {
+                showError("Invalid username or password");
+            }
+        }
+
+        function showError(message) {
+            // Remove any existing error message
+            const existingError = document.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Create and show new error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.innerHTML = `
+                <i class="fas fa-exclamation-circle"></i>
+                <span>${message}</span>
+            `;
+            
+            const form = document.getElementById('loginForm');
+            form.insertBefore(errorDiv, form.firstChild);
+            
+            // Make sure the error message is visible
+            errorDiv.style.display = 'flex';
+            errorDiv.style.opacity = '1';
+            
+            // Auto-remove error message after 3 seconds
+            setTimeout(() => {
+                errorDiv.style.opacity = '0';
+                setTimeout(() => errorDiv.remove(), 300);
+            }, 3000);
+        }
+
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            passwordInput.type = passwordInput.type === 'password' ? 'text' : 'password';
+        }
+
+        // Check if user is remembered
+        window.onload = function() {
+            if (localStorage.getItem('rememberMe') === 'true') {
+                const rememberedUser = localStorage.getItem('rememberedUser');
+                if (rememberedUser) {
+                    document.getElementById('username').value = rememberedUser;
+                    document.getElementById('rememberMe').checked = true;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

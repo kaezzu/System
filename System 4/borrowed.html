@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borrowed Items - Colegio de Muntinlupa</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dashboard-page">
+    <script>
+        // Check if user is logged in
+        if (!sessionStorage.getItem('isLoggedIn')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+
+    <div class="sidebar">
+        <div class="sidebar-user">
+            <div class="sidebar-user-avatar">
+                👤
+            </div>
+            <div class="sidebar-user-info">
+                <p class="sidebar-user-name" id="sidebarUserName">Loading...</p>
+                <p class="sidebar-user-role" id="sidebarUserRole">Loading...</p>
+                <p class="sidebar-user-fullname" id="sidebarUserFullName">Loading...</p>
+            </div>
+        </div>
+        <div class="sidebar-nav">
+            <div class="sidebar-item" onclick="window.location.href='dashboard.html'">
+                <i>🏠</i>
+                <span>Home</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='inventory.html'">
+                <i>📦</i>
+                <span>Inventory</span>
+            </div>
+            <div class="sidebar-item active" onclick="window.location.href='borrowed.html'">
+                <i>📝</i>
+                <span>Borrowed Items</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='user-activity.html'">
+                <i>👥</i>
+                <span>User Activity</span>
+            </div>
+            <div class="sidebar-item" onclick="window.location.href='notifications.html'">
+                <i>🔔</i>
+                <span>Notifications</span>
+                <span class="notification-badge"></span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <div class="sidebar-item" onclick="logout()">
+                <i>🚪</i>
+                <span>Logout</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <div class="user-info">
+                <img src="school_logo.png" alt="School Logo">
+                <span>BORROWED ITEMS</span>
+            </div>
+
+            <div class="flag-stripes">
+                <div class="stripe yellow"></div>
+                <div class="stripe red"></div>
+                <div class="stripe blue"></div>
+            </div>
+        </div>
+
+        <div class="inventory-controls">
+            <button onclick="showBorrowItemModal()" class="action-button" id="borrowItemButton">+ Borrow New Item</button>
+            <div class="search-filters">
+                <input type="text" id="searchInput" placeholder="Search borrowed items..." class="search-input">
+                <select id="statusFilter" class="filter-select">
+                    <option value="">All Status</option>
+                    <option value="Borrowed">Borrowed</option>
+                    <option value="Returned">Returned</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="inventory-table-container">
+            <table class="inventory-table">
+                <thead>
+                    <tr>
+                        <th>Item Name</th>
+                        <th>Category</th>
+                        <th>Borrowed Quantity</th>
+                        <th>Borrower Name</th>
+                        <th>Department</th>
+                        <th>Borrow Date</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th class="actions-column">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="borrowedTableBody">
+                    <!-- Table rows will be dynamically populated -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Borrow Item Modal -->
+    <div id="borrowModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeBorrowModal()">&times;</span>
+            <h2>Borrow Item</h2>
+            <form id="borrowForm" onsubmit="handleBorrowSubmit(event)">
+                <div class="form-field required">
+                    <label for="borrowItem">Select Item</label>
+                    <select id="borrowItem" required>
+                        <option value="">Choose an item...</option>
+                    </select>
+                    <div class="error-message">Please select an item</div>
+                </div>
+
+                <div class="form-field required">
+                    <label for="borrowQuantity">Quantity</label>
+                    <input type="number" id="borrowQuantity" placeholder="Enter quantity" required min="1">
+                    <div class="error-message">Please enter a valid quantity</div>
+                </div>
+
+                <div class="form-field required">
+                    <label for="borrowerName">Borrower Name</label>
+                    <input type="text" id="borrowerName" placeholder="Enter borrower's name" required>
+                    <div class="error-message">Please enter borrower's name</div>
+                </div>
+
+                <div class="form-field required">
+                    <label for="department">Department</label>
+                    <input type="text" id="department" placeholder="Enter department" required>
+                    <div class="error-message">Please enter department</div>
+                </div>
+
+                <div class="form-field required">
+                    <label for="dueDate">Due Date</label>
+                    <input type="date" id="dueDate" required>
+                    <div class="error-message">Please select a due date</div>
+                </div>
+
+                <button type="submit" class="action-button">Borrow Item</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="shared.js"></script>
+    <script src="borrowed.js"></script>
+    <script>
+        // Function to format role text
+        function formatRole(role) {
+            switch(role) {
+                case 'department_head':
+                    return 'Department Head';
+                case 'logistic_officer':
+                    return 'Logistic Officer';
+                case 'member':
+                    return 'Member';
+                default:
+                    return role;
+            }
+        }
+
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            window.location.href = 'index.html';
+        }
+
+        // Function to update user info in sidebar
+        function updateUserInfo() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+            }
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserInfo();
+        });
+    </script>
+</body>
+</html> 
