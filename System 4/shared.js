@@ -1,158 +1,180 @@
 // Shared functionality across pages
 
+// API base URL
+const API_BASE_URL = 'http://localhost:3000/api';
+
 // Function to log user activity
-function logActivity(action, details) {
+async function logActivity(action, details) {
     const currentUser = JSON.parse(sessionStorage.getItem('currentUser')) || { username: 'Unknown' };
-    const activity = {
-        timestamp: new Date().toISOString(),
-        username: currentUser.username,
-        action: action,
-        details: details
-    };
-    const activities = JSON.parse(localStorage.getItem('userActivities')) || [];
-    activities.unshift(activity); // Add to beginning of array
-    if (activities.length > 1000) activities.length = 1000; // Limit to 1000 entries
-    localStorage.setItem('userActivities', JSON.stringify(activities));
+    try {
+        const response = await fetch(`${API_BASE_URL}/activities`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                username: currentUser.username,
+                action,
+                details
+            })
+        });
+        if (!response.ok) throw new Error('Failed to log activity');
+    } catch (err) {
+        console.error('Error logging activity:', err);
+    }
 }
 
 // Function to check for low stock
-function checkLowStock() {
-    const items = JSON.parse(localStorage.getItem('inventoryItems')) || [];
-    const lowStockThreshold = 20;
-    
-    return items.filter(item => parseInt(item.quantity) <= lowStockThreshold);
+async function checkLowStock() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/inventory`);
+        const items = await response.json();
+        const lowStockThreshold = 20;
+        return items.filter(item => parseInt(item.quantity) <= lowStockThreshold);
+    } catch (err) {
+        console.error('Error checking low stock:', err);
+        return [];
+    }
 }
 
 // Function to check for out of stock items
-function checkOutOfStock() {
-    const items = JSON.parse(localStorage.getItem('inventoryItems')) || [];
-    return items.filter(item => parseInt(item.quantity) <= 0);
+async function checkOutOfStock() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/inventory`);
+        const items = await response.json();
+        return items.filter(item => parseInt(item.quantity) <= 0);
+    } catch (err) {
+        console.error('Error checking out of stock items:', err);
+        return [];
+    }
 }
 
 // Function to create a notification
-function createNotification(type, message, details = {}) {
-    const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-    
-    // Check if a similar notification already exists and is unread
-    const existingSimilarNotification = notifications.find(n => 
-        n.type === type && 
-        n.message === message && 
-        !n.read &&
-        JSON.stringify(n.details) === JSON.stringify(details) &&
-        // Only consider notifications created in the last hour
-        (new Date().getTime() - new Date(n.timestamp).getTime()) < 3600000
-    );
+async function createNotification(type, message, details = {}) {
+    try {
+        // Check if a similar notification already exists and is unread
+        const response = await fetch(`${API_BASE_URL}/notifications`);
+        const notifications = await response.json();
+        
+        const existingSimilarNotification = notifications.find(n => 
+            n.type === type && 
+            n.message === message && 
+            !n.read &&
+            JSON.stringify(n.details) === JSON.stringify(details) &&
+            // Only consider notifications created in the last hour
+            (new Date().getTime() - new Date(n.timestamp).getTime()) < 3600000
+        );
 
-    // Only create a new notification if no similar unread notification exists
-    if (!existingSimilarNotification) {
-        const notification = {
-            id: Date.now(),
-            type,
-            message,
-            details,
-            timestamp: new Date().toISOString(),
-            read: false
-        };
-        
-        notifications.unshift(notification);
-        
-        // Keep only last 100 notifications
-        if (notifications.length > 100) {
-            notifications.length = 100;
+        // Only create a new notification if no similar unread notification exists
+        if (!existingSimilarNotification) {
+            await fetch(`${API_BASE_URL}/notifications`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type,
+                    message,
+                    details
+                })
+            });
+            updateNotificationBadge();
         }
-        
-        localStorage.setItem('notifications', JSON.stringify(notifications));
-        updateNotificationBadge();
+    } catch (err) {
+        console.error('Error creating notification:', err);
     }
 }
 
 // Function to update notification badge count
-function updateNotificationBadge() {
-    const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-    const unreadCount = notifications.filter(n => !n.read).length;
-    
-    // Update all notification badges in the document
-    const badges = document.querySelectorAll('.notification-badge');
-    badges.forEach(badge => {
-        badge.textContent = unreadCount;
-        if (unreadCount > 0) {
-            badge.classList.add('visible');
-        } else {
-            badge.classList.remove('visible');
-        }
-    });
+async function updateNotificationBadge() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/notifications`);
+        const notifications = await response.json();
+        const unreadCount = notifications.filter(n => !n.read).length;
+        
+        // Update all notification badges in the document
+        const badges = document.querySelectorAll('.notification-badge');
+        badges.forEach(badge => {
+            badge.textContent = unreadCount;
+            if (unreadCount > 0) {
+                badge.classList.add('visible');
+            } else {
+                badge.classList.remove('visible');
+            }
+        });
+    } catch (err) {
+        console.error('Error updating notification badge:', err);
+    }
 }
 
 // Function to check for low stock and create notifications
-function checkAndNotifyLowStock() {
-    // Get the last check timestamp
-    const lastCheck = localStorage.getItem('lastLowStockCheck');
-    const now = new Date().getTime();
-    
-    // Only check if it's been more than 5 minutes since the last check
-    if (!lastCheck || (now - parseInt(lastCheck)) > 300000) {
-        const lowStockItems = checkLowStock();
-        const outOfStockItems = checkOutOfStock();
+async function checkAndNotifyLowStock() {
+    try {
+        // Get the last check timestamp
+        const lastCheck = localStorage.getItem('lastLowStockCheck');
+        const now = new Date().getTime();
         
-        // Notify for low stock items
-        lowStockItems.forEach(item => {
-            if (parseInt(item.quantity) > 0) { // Only notify if not out of stock
-                createNotification(
-                    'low_stock',
-                    `Low Stock Alert: ${item.name}`,
+        // Only check if it's been more than 5 minutes since the last check
+        if (!lastCheck || (now - parseInt(lastCheck)) > 300000) {
+            const lowStockItems = await checkLowStock();
+            const outOfStockItems = await checkOutOfStock();
+            
+            // Notify for low stock items
+            for (const item of lowStockItems) {
+                if (parseInt(item.quantity) > 0) { // Only notify if not out of stock
+                    await createNotification(
+                        'low_stock',
+                        `Low Stock Alert: ${item.name}`,
+                        {
+                            itemName: item.name,
+                            currentQuantity: item.quantity,
+                            category: item.category_name
+                        }
+                    );
+                }
+            }
+
+            // Notify for out of stock items
+            for (const item of outOfStockItems) {
+                await createNotification(
+                    'out_of_stock',
+                    `Out of Stock Alert: ${item.name}`,
                     {
                         itemName: item.name,
-                        currentQuantity: item.quantity,
-                        category: item.category
+                        category: item.category_name
                     }
                 );
             }
-        });
-
-        // Notify for out of stock items
-        outOfStockItems.forEach(item => {
-            createNotification(
-                'out_of_stock',
-                `Out of Stock Alert: ${item.name}`,
-                {
-                    itemName: item.name,
-                    category: item.category
-                }
-            );
-        });
-        
-        // Update last check timestamp
-        localStorage.setItem('lastLowStockCheck', now.toString());
+            
+            // Update last check timestamp
+            localStorage.setItem('lastLowStockCheck', now.toString());
+        }
+    } catch (err) {
+        console.error('Error checking and notifying low stock:', err);
     }
 }
 
 // Function to mark notification as read
-function markNotificationAsRead(notificationId) {
-    const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-    const notification = notifications.find(n => n.id === notificationId);
-    
-    if (notification && !notification.read) {
-        notification.read = true;
-        localStorage.setItem('notifications', JSON.stringify(notifications));
+async function markNotificationAsRead(notificationId) {
+    try {
+        await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+            method: 'PUT'
+        });
         updateNotificationBadge();
+    } catch (err) {
+        console.error('Error marking notification as read:', err);
     }
 }
 
 // Function to mark all notifications as read
-function markAllNotificationsAsRead() {
-    const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-    let hasUnreadNotifications = false;
-    
-    notifications.forEach(notification => {
-        if (!notification.read) {
-            notification.read = true;
-            hasUnreadNotifications = true;
-        }
-    });
-    
-    if (hasUnreadNotifications) {
-        localStorage.setItem('notifications', JSON.stringify(notifications));
+async function markAllNotificationsAsRead() {
+    try {
+        await fetch(`${API_BASE_URL}/notifications/read-all`, {
+            method: 'PUT'
+        });
         updateNotificationBadge();
+    } catch (err) {
+        console.error('Error marking all notifications as read:', err);
     }
 }
 

@@ -54,7 +54,7 @@ function validateUsername(username) {
     return usernameRegex.test(username);
 }
 
-function register(event) {
+async function register(event) {
     event.preventDefault();
     
     // Get form values
@@ -98,51 +98,52 @@ function register(event) {
         return false;
     }
 
-    // Get existing users or initialize empty array
-    const users = JSON.parse(localStorage.getItem('users')) || [];
-
-    // Check if username or email already exists
-    if (users.some(user => user.username.toLowerCase() === username.toLowerCase())) {
-        showError("Username already exists");
-        return false;
-    }
-
-    if (users.some(user => user.email.toLowerCase() === email.toLowerCase())) {
-        showError("Email already registered");
-        return false;
-    }
-
-    // Create new user object
-    const newUser = {
+    // Prepare user data
+    const userData = {
         fullName,
         email,
         username,
         password,
-        role,
-        createdAt: new Date().toISOString()
+        role
     };
 
-    // Add to users array
-    users.push(newUser);
+    // Get the submit button
+    const submitButton = document.querySelector('button[type="submit"]');
+    const originalButtonContent = submitButton.innerHTML;
 
-    // Save to localStorage
+    // Show loading state
+    submitButton.innerHTML = `
+      
+      <span>Creating Account...</span>
+    `;
+    submitButton.disabled = true;
+
     try {
-        localStorage.setItem('users', JSON.stringify(users));
-        
-        // Show success message and redirect
-        const registerButton = document.querySelector('.login-button');
-        const originalContent = registerButton.innerHTML;
-        registerButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
-        registerButton.disabled = true;
+        const response = await fetch('http://localhost:3000/api/auth/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(userData)
+        });
 
-        setTimeout(() => {
+        const data = await response.json();
+
+        if (data.success) {
             showSuccess("Account created successfully! Redirecting to login...");
             setTimeout(() => {
                 window.location.href = "index.html";
             }, 2000);
-        }, 1000);
+        } else {
+            showError(data.message || "Registration failed");
+            submitButton.innerHTML = originalButtonContent;
+            submitButton.disabled = false;
+        }
     } catch (error) {
         showError("Error creating account. Please try again.");
+        submitButton.innerHTML = originalButtonContent;
+        submitButton.disabled = false;
         console.error('Error saving user:', error);
     }
 

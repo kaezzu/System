@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Borrowed Items - Colegio de Muntinlupa</title>
     <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="dashboard-page">
+<body class="min-h-screen bg-secondary-50">
     <script>
         // Check if user is logged in
         if (!sessionStorage.getItem('isLoggedIn')) {
@@ -14,135 +15,163 @@
         }
     </script>
 
-    <div class="sidebar">
-        <div class="sidebar-user">
-            <div class="sidebar-user-avatar">
-                👤
-            </div>
-            <div class="sidebar-user-info">
-                <p class="sidebar-user-name" id="sidebarUserName">Loading...</p>
-                <p class="sidebar-user-role" id="sidebarUserRole">Loading...</p>
-                <p class="sidebar-user-fullname" id="sidebarUserFullName">Loading...</p>
-            </div>
-        </div>
-        <div class="sidebar-nav">
-            <div class="sidebar-item" onclick="window.location.href='dashboard.html'">
-                <i>🏠</i>
-                <span>Home</span>
-            </div>
-            <div class="sidebar-item" onclick="window.location.href='inventory.html'">
-                <i>📦</i>
-                <span>Inventory</span>
-            </div>
-            <div class="sidebar-item active" onclick="window.location.href='borrowed.html'">
-                <i>📝</i>
-                <span>Borrowed Items</span>
-            </div>
-            <div class="sidebar-item" onclick="window.location.href='user-activity.html'">
-                <i>👥</i>
-                <span>User Activity</span>
-            </div>
-            <div class="sidebar-item" onclick="window.location.href='notifications.html'">
-                <i>🔔</i>
-                <span>Notifications</span>
-                <span class="notification-badge"></span>
-            </div>
-        </div>
-        <div class="sidebar-footer">
-            <div class="sidebar-item" onclick="logout()">
-                <i>🚪</i>
-                <span>Logout</span>
-            </div>
-        </div>
-    </div>
-    
-    <div class="main-content">
-        <div class="header">
-            <div class="user-info">
-                <img src="school_logo.png" alt="School Logo">
-                <span>BORROWED ITEMS</span>
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-64 bg-white shadow-lg">
+            <div class="p-4 border-b border-secondary-200">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                        <span class="text-xl">👤</span>
+                    </div>
+                    <div>
+                        <p class="font-medium text-secondary-900" id="sidebarUserName">Loading...</p>
+                        <p class="text-sm text-secondary-600" id="sidebarUserRole">Loading...</p>
+                        <p class="text-xs text-secondary-500" id="sidebarUserFullName">Loading...</p>
+                    </div>
+                </div>
             </div>
 
-            <div class="flag-stripes">
-                <div class="stripe yellow"></div>
-                <div class="stripe red"></div>
-                <div class="stripe blue"></div>
-            </div>
-        </div>
+            <nav class="p-4 space-y-2">
+                <a href="dashboard.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    <span>Home</span>
+                </a>
+                <a href="inventory.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                    </svg>
+                    <span>Inventory</span>
+                </a>
+                <a href="borrowed.html" class="flex items-center space-x-3 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg transition-all duration-200 hover:bg-primary-100">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                    </svg>
+                    <span>Borrowed Items</span>
+                </a>
+                <a href="user-activity.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    <span>User Activity</span>
+                </a>
+                <a href="notifications.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                    </svg>
+                    <span>Notifications</span>
+                    <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
+                </a>
+            </nav>
 
-        <div class="inventory-controls">
-            <button onclick="showBorrowItemModal()" class="action-button" id="borrowItemButton">+ Borrow New Item</button>
-            <div class="search-filters">
-                <input type="text" id="searchInput" placeholder="Search borrowed items..." class="search-input">
-                <select id="statusFilter" class="filter-select">
-                    <option value="">All Status</option>
-                    <option value="Borrowed">Borrowed</option>
-                    <option value="Returned">Returned</option>
-                </select>
+            <div class="absolute bottom-0 w-64 p-4 border-t border-secondary-200">
+                <button onclick="logout()" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg w-full transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    <span>Logout</span>
+                </button>
             </div>
         </div>
 
-        <div class="inventory-table-container">
-            <table class="inventory-table">
-                <thead>
-                    <tr>
-                        <th>Item Name</th>
-                        <th>Category</th>
-                        <th>Borrowed Quantity</th>
-                        <th>Borrower Name</th>
-                        <th>Department</th>
-                        <th>Borrow Date</th>
-                        <th>Due Date</th>
-                        <th>Status</th>
-                        <th class="actions-column">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="borrowedTableBody">
-                    <!-- Table rows will be dynamically populated -->
-                </tbody>
-            </table>
+        <!-- Main Content -->
+        <div class="flex-1 overflow-auto">
+            <header class="bg-white shadow-sm">
+                <div class="px-8 py-4 flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <img src="school_logo.png" alt="School Logo" class="h-10">
+                        <h1 class="text-xl font-semibold text-secondary-900">Borrowed Items</h1>
+                    </div>
+                    <div class="flex space-x-2">
+                        <div class="w-4 h-8 bg-yellow-400"></div>
+                        <div class="w-4 h-8 bg-red-500"></div>
+                        <div class="w-4 h-8 bg-blue-600"></div>
+                    </div>
+                </div>
+            </header>
+
+            <main class="p-8">
+                <!-- Controls -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                    <button onclick="showBorrowItemModal()" class="btn-primary flex items-center space-x-2">
+                        <span>+</span>
+                        <span>Borrow New Item</span>
+                    </button>
+                    <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                        <div class="relative flex-1 md:w-64">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <span class="text-secondary-500">🔍</span>
+                            </div>
+                            <input type="text" id="searchInput" placeholder="Search borrowed items..." 
+                                class="input-field pl-10">
+                        </div>
+                        <select id="statusFilter" class="input-field md:w-48">
+                            <option value="">All Status</option>
+                            <option value="Borrowed">Borrowed</option>
+                            <option value="Returned">Returned</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-secondary-200">
+                            <thead class="bg-secondary-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Item Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Category</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Borrowed Quantity</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Borrower Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Department</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Borrow Date</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Due Date</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="borrowedTableBody" class="bg-white divide-y divide-secondary-200">
+                                <!-- Table rows will be dynamically populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
         </div>
     </div>
 
     <!-- Borrow Item Modal -->
-    <div id="borrowModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" onclick="closeBorrowModal()">&times;</span>
-            <h2>Borrow Item</h2>
-            <form id="borrowForm" onsubmit="handleBorrowSubmit(event)">
-                <div class="form-field required">
-                    <label for="borrowItem">Select Item</label>
-                    <select id="borrowItem" required>
+    <div id="borrowModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-secondary-900">Borrow Item</h2>
+                <button onclick="closeBorrowModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
+            </div>
+            <form id="borrowForm" onsubmit="handleBorrowSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Select Item</label>
+                    <select id="borrowItem" class="input-field" required>
                         <option value="">Choose an item...</option>
                     </select>
-                    <div class="error-message">Please select an item</div>
                 </div>
-
-                <div class="form-field required">
-                    <label for="borrowQuantity">Quantity</label>
-                    <input type="number" id="borrowQuantity" placeholder="Enter quantity" required min="1">
-                    <div class="error-message">Please enter a valid quantity</div>
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Quantity</label>
+                    <input type="number" id="borrowQuantity" class="input-field" placeholder="Enter quantity" required min="1">
                 </div>
-
-                <div class="form-field required">
-                    <label for="borrowerName">Borrower Name</label>
-                    <input type="text" id="borrowerName" placeholder="Enter borrower's name" required>
-                    <div class="error-message">Please enter borrower's name</div>
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Borrower Name</label>
+                    <input type="text" id="borrowerName" class="input-field" placeholder="Enter borrower's name" required>
                 </div>
-
-                <div class="form-field required">
-                    <label for="department">Department</label>
-                    <input type="text" id="department" placeholder="Enter department" required>
-                    <div class="error-message">Please enter department</div>
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Department</label>
+                    <input type="text" id="department" class="input-field" placeholder="Enter department" required>
                 </div>
-
-                <div class="form-field required">
-                    <label for="dueDate">Due Date</label>
-                    <input type="date" id="dueDate" required>
-                    <div class="error-message">Please select a due date</div>
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Due Date</label>
+                    <input type="date" id="dueDate" class="input-field" required>
                 </div>
-
-                <button type="submit" class="action-button">Borrow Item</button>
+                <button type="submit" class="w-full btn-primary">Borrow Item</button>
             </form>
         </div>
     </div>
