@@ -1,0 +1,17 @@
+# Node modules (frontend)
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Ignore backend node_modules from root as well (just in case)
+server/node_modules/
