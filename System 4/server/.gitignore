@@ -12,3 +12,6 @@ yarn-error.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Ignore backend node_modules from root as well (just in case)
+server/node_modules/
