@@ -169,33 +169,36 @@
                     items.forEach(item => {
                         const row = document.createElement('tr');
                         row.innerHTML = `
-                            <td class="px-6 py-4">${item.product_id}</td>
-                            <td class="px-6 py-4">${item.name}</td>
-                            <td class="px-6 py-4">${item.category || '-'}</td>
-                            <td class="px-6 py-4">${item.status}</td>
-                            <td class="px-6 py-4">${item.availability}</td>
-                            <td class="px-6 py-4">${item.quantity || 0}</td>
-                            <td class="px-6 py-4 whitespace-nowrap">
+                            <td class="px-6 py-4 text-center">${item.product_id}</td>
+                            <td class="px-6 py-4 text-center">${item.name}</td>
+                            <td class="px-6 py-4 text-center">${item.category || '-'}</td>
+                            <td class="px-6 py-4 text-center">${item.status}</td>
+                            <td class="px-6 py-4 text-center">${item.availability}</td>
+                            <td class="px-6 py-4 text-center">${item.quantity || 0}</td>
+                            <td class="px-6 py-4 text-center">
                                 <div class="flex items-center justify-center space-x-3">
                                     <button onclick="editItem(${item.product_id})"
-                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
-                                        title="Edit">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        class="inline-flex items-center justify-center px-2 py-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
+                                        title="Edit Item"
+                                        aria-label="Edit Item">
+                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                         </svg>
                                     </button>
                                     <button onclick="deleteItem(${item.product_id})"
-                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-red-600 text-red-600 hover:bg-red-50 rounded-md transition-colors duration-150"
-                                        title="Delete">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        class="inline-flex items-center justify-center px-2 py-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors duration-150"
+                                        title="Delete Item"
+                                        aria-label="Delete Item">
+                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                         </svg>
                                     </button>
                                     <button onclick="showQuantityModal(${item.product_id}, '${item.name}', ${item.quantity || 0})"
-                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-green-600 text-green-600 hover:bg-green-50 rounded-md transition-colors duration-150"
-                                        title="Manage Quantity">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                        class="inline-flex items-center justify-center px-2 py-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors duration-150"
+                                        title="Manage Quantity"
+                                        aria-label="Manage Quantity">
+                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                         </svg>
                                     </button>
                                 </div>
@@ -437,13 +440,13 @@
                         <table class="min-w-full divide-y divide-secondary-200">
                             <thead class="bg-secondary-50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Product ID</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Category</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Availability</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Quantity</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Product ID</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Name</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Category</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Availability</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Quantity</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="inventoryTableBody" class="bg-white divide-y divide-secondary-200">
