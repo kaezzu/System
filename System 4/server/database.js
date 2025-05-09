@@ -101,19 +101,29 @@ async function initializeDatabase() {
                             console.error('Error listing users:', err);
                             return;
                         }
-                        console.log('Existing users:', users);
                     });
                 }
             });
         });
 
-        // Supplier table (ERD)
+        // Supplier table
         db.run(`CREATE TABLE IF NOT EXISTS suppliers (
             supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            contact TEXT,
-            email TEXT,
-            address TEXT
+            contact TEXT NOT NULL,
+            email TEXT NOT NULL,
+            phone TEXT,
+            address TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        // Activity log table
+        db.run(`CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME NOT NULL,
+            action TEXT NOT NULL,
+            details TEXT NOT NULL
         )`);
 
         // Items table (ERD)

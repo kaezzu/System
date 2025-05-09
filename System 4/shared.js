@@ -213,4 +213,38 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isInventoryPage) {
         checkAndNotifyLowStock();
     }
+});
+
+// Function to format role text
+function formatRole(role) {
+    switch(role) {
+        case 'department_head':
+            return 'Department Head';
+        case 'logistic_officer':
+            return 'Logistic Officer';
+        case 'member':
+            return 'Member';
+        default:
+            return role;
+    }
+}
+
+function logout() {
+    sessionStorage.removeItem('isLoggedIn');
+    window.location.href = 'index.html';
+}
+
+// Function to update user info in sidebar
+function updateUserInfo() {
+    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (currentUser) {
+        document.getElementById('sidebarUserName').textContent = currentUser.username;
+        document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+        document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+    }
+}
+
+// Initialize user info when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    updateUserInfo();
 }); 
