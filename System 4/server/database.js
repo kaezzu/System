@@ -34,14 +34,6 @@ async function initializeDatabase() {
             FOREIGN KEY (category_id) REFERENCES categories(id)
         )`);
 
-        // User activities table
-        db.run(`CREATE TABLE IF NOT EXISTS user_activities (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            username TEXT NOT NULL,
-            action TEXT NOT NULL,
-            details TEXT NOT NULL
-        )`);
 
         // Notifications table
         db.run(`CREATE TABLE IF NOT EXISTS notifications (

@@ -6,6 +6,7 @@
     <title>Dashboard - Colegio de Muntinlupa</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="activity-logger.js"></script>
 </head>
 <body class="min-h-screen bg-secondary-50">
     <script>
@@ -20,8 +21,10 @@
         <div class="w-64 bg-white shadow-lg">
             <div class="p-4 border-b border-secondary-200">
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                        <span class="text-xl">👤</span>
+                    <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                        </svg>
                     </div>
                     <div>
                         <p class="font-medium text-secondary-900" id="sidebarUserName">Loading...</p>
@@ -202,8 +205,19 @@
         }
 
         function logout() {
-            sessionStorage.removeItem('isLoggedIn');
-            window.location.href = 'index.html';
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                ActivityLogger.logUserActivity(ActivityLogger.ACTIONS.USER.LOGOUT, currentUser)
+                    .finally(() => {
+                        sessionStorage.removeItem('isLoggedIn');
+                        sessionStorage.removeItem('currentUser');
+                        window.location.href = 'index.html';
+                    });
+            } else {
+                sessionStorage.removeItem('isLoggedIn');
+                sessionStorage.removeItem('currentUser');
+                window.location.href = 'index.html';
+            }
         }
 
         // Function to update user info in sidebar
@@ -223,28 +237,73 @@
         }
 
         // Function to display recent activities
-        function displayRecentActivities() {
-            const activities = JSON.parse(localStorage.getItem('userActivities')) || [];
-            const recentActivities = activities.slice(0, 5); // Get 5 most recent activities
-            const container = document.getElementById('recentActivities');
-            
-            if (recentActivities.length === 0) {
-                container.innerHTML = '<div class="no-data">No recent activities</div>';
-                return;
-            }
+        async function displayRecentActivities() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/recent-activities`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to fetch activities');
+                }
 
-            container.innerHTML = recentActivities.map(activity => `
-                <div class="activity-item">
-                    <div class="activity-header">
-                        <span class="activity-badge ${activity.action}">${activity.action}</span>
-                        <span class="activity-time">${formatTimestamp(activity.timestamp)}</span>
+                const container = document.getElementById('recentActivities');
+                const activities = data.activities;
+                
+                if (activities.length === 0) {
+                    container.innerHTML = '<div class="text-center text-gray-500 p-4">No recent activities</div>';
+                    return;
+                }
+
+                container.innerHTML = activities.map(activity => `
+                    <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="px-2 py-1 text-xs font-medium rounded-full ${getActionColor(activity.action)}">
+                                    ${formatAction(activity.action)}
+                                </span>
+                                <span class="text-sm text-gray-500">${new Date(activity.timestamp).toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-700">${activity.details}</p>
+                        <div class="mt-2 text-xs text-gray-500">
+                            By ${activity.full_name || activity.username || 'System'}
+                        </div>
                     </div>
-                    <div class="activity-details">
-                        <span class="activity-user">${activity.username}</span>
-                        <span class="activity-description">${activity.details}</span>
-                    </div>
-                </div>
-            `).join('');
+                `).join('');
+            } catch (error) {
+                console.error('Error fetching activities:', error);
+                const container = document.getElementById('recentActivities');
+                container.innerHTML = '<div class="text-center text-red-500 p-4">Error loading activities</div>';
+            }
+        }
+
+        function getActionColor(action) {
+            switch (action.toLowerCase()) {
+                case 'add_item':
+                case 'add_supplier':
+                case 'add_note':
+                    return 'bg-green-100 text-green-800';
+                case 'delete_item':
+                case 'delete_supplier':
+                case 'delete_note':
+                    return 'bg-red-100 text-red-800';
+                case 'edit_item':
+                case 'edit_supplier':
+                case 'edit_note':
+                    return 'bg-blue-100 text-blue-800';
+                case 'user_login':
+                    return 'bg-purple-100 text-purple-800';
+                case 'user_logout':
+                    return 'bg-orange-100 text-orange-800';
+                default:
+                    return 'bg-gray-100 text-gray-800';
+            }
+        }
+
+        function formatAction(action) {
+            return action.split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
         }
 
         // Function to display recent notifications
@@ -343,12 +402,12 @@
             document.getElementById('quickNoteForm').reset();
         }
 
-        function handleQuickNoteSubmit(event) {
+        async function handleQuickNoteSubmit(event) {
             event.preventDefault();
             
             const titleField = document.getElementById('quickNoteTitle').parentElement.parentElement;
             const contentField = document.getElementById('quickNoteContent').parentElement.parentElement;
-            const submitButton = event.target.querySelector('.submit-button');
+            const submitButton = event.target.querySelector('button[type="submit"]');
             
             titleField.classList.remove('error');
             contentField.classList.remove('error');
@@ -371,35 +430,56 @@
             
             if (hasError) return;
             
-            submitButton.classList.add('loading');
+            // Show loading state
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.innerHTML = '<span>Saving...</span>';
+            submitButton.disabled = true;
             
-            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-            
-            const note = {
-                id: Date.now(),
-                title: title,
-                content: content,
-                priority: priority,
-                author: currentUser.username,
-                authorFullName: currentUser.fullName,
-                createdAt: new Date().toLocaleString(),
-                updatedAt: new Date().toLocaleString()
-            };
-            
-            setTimeout(() => {
+            try {
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                
+                const note = {
+                    id: Date.now(),
+                    title: title,
+                    content: content,
+                    priority: priority,
+                    author: currentUser.username,
+                    authorFullName: currentUser.fullName,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                // Save note
                 const notes = JSON.parse(localStorage.getItem('notes')) || [];
                 notes.unshift(note);
                 localStorage.setItem('notes', JSON.stringify(notes));
                 
-                logActivity('note', `${currentUser.username} created a new note: ${title}`);
+                // Log the activity
+                await ActivityLogger.logNoteActivity(ActivityLogger.ACTIONS.NOTE.ADD, note);
                 
                 displayRecentNotes();
                 closeQuickNoteModal();
                 
-                showSuccessMessage('Note created successfully!');
+                // Show success message
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
+                messageDiv.innerHTML = '✅ Note created successfully!';
+                document.body.appendChild(messageDiv);
+                setTimeout(() => messageDiv.remove(), 3000);
                 
-                submitButton.classList.remove('loading');
-            }, 500);
+            } catch (error) {
+                console.error('Error creating note:', error);
+                // Show error message
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded';
+                messageDiv.innerHTML = '❌ Error creating note. Please try again.';
+                document.body.appendChild(messageDiv);
+                setTimeout(() => messageDiv.remove(), 3000);
+            } finally {
+                // Reset button state
+                submitButton.innerHTML = originalButtonText;
+                submitButton.disabled = false;
+            }
         }
 
         // Initialize dashboard

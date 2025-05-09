@@ -16,6 +16,11 @@ const ActivityLogger = {
         USER: {
             LOGIN: 'user_login',
             LOGOUT: 'user_logout'
+        },
+        NOTE: {
+            ADD: 'add_note',
+            EDIT: 'edit_note',
+            DELETE: 'delete_note'
         }
     },
 
@@ -30,7 +35,7 @@ const ActivityLogger = {
     async logActivity(action, details, options = {}) {
         try {
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-            const response = await fetch(`${API_BASE_URL}/api/activities`, {
+            const response = await fetch(`${API_BASE_URL}/activities`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -135,6 +140,33 @@ const ActivityLogger = {
     },
 
     /**
+     * Log note-related activities
+     */
+    async logNoteActivity(action, note, oldNote = null) {
+        let details = '';
+        let metadata = { 
+            note_id: note.id,
+            title: note.title,
+            priority: note.priority
+        };
+
+        switch (action) {
+            case this.ACTIONS.NOTE.ADD:
+                details = `Added new note: ${note.title}`;
+                break;
+            case this.ACTIONS.NOTE.EDIT:
+                details = `Updated note: ${note.title}`;
+                metadata.changes = this.getChanges(oldNote, note);
+                break;
+            case this.ACTIONS.NOTE.DELETE:
+                details = `Deleted note: ${note.title}`;
+                break;
+        }
+
+        return this.logActivity(action, details, { metadata });
+    },
+
+    /**
      * Get changes between old and new object
      * @private
      */
@@ -193,6 +225,11 @@ const ActivityLogger = {
             // User actions
             user_login: 'bg-teal-100 text-teal-800',
             user_logout: 'bg-gray-100 text-gray-800',
+            
+            // Note actions
+            add_note: 'bg-emerald-100 text-emerald-800',
+            edit_note: 'bg-amber-100 text-amber-800',
+            delete_note: 'bg-rose-100 text-rose-800',
             
             default: 'bg-gray-100 text-gray-800'
         };

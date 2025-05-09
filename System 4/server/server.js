@@ -351,205 +351,181 @@ app.delete('/api/items/:id', async (req, res) => {
     }
 });
 
-// Activity log endpoints
-app.post('/api/activities', async (req, res) => {
-    const { action, details, user_id, timestamp, metadata } = req.body;
-
-    if (!action || !details) {
-        return res.status(400).json({
-            success: false,
-            error: "Action and details are required"
-        });
-    }
-
+// Initialize activity_log table
+async function initializeActivityLogTable() {
     try {
-        await runQuery('BEGIN TRANSACTION');
-
-        try {
-            // Insert the activity
-            const result = await runQuery(
-                `INSERT INTO activity_log (
-                    timestamp, 
-                    action, 
-                    details, 
-                    user_id,
-                    metadata
-                ) VALUES (?, ?, ?, ?, ?)`,
-                [
-                    timestamp || new Date().toISOString(),
-                    action,
-                    details,
-                    user_id,
-                    metadata ? JSON.stringify(metadata) : null
-                ]
-            );
-
-            // Get the created activity with user info
-            const activity = await getOne(
-                `SELECT 
-                    activity_log.*, 
-                    users.username,
-                    users.role,
-                    users.full_name as user_full_name
-                FROM activity_log
-                LEFT JOIN users ON activity_log.user_id = users.id
-                WHERE activity_log.id = ?`,
-                [result.lastID]
-            );
-
-            await runQuery('COMMIT');
-
-            // Format the response
-            const formattedActivity = {
-                ...activity,
-                metadata: activity.metadata ? JSON.parse(activity.metadata) : null,
-                username: activity.username || 'System',
-                role: activity.role || 'system',
-                user_full_name: activity.user_full_name || null
-            };
-
-            res.status(201).json({
-                success: true,
-                message: 'Activity logged successfully',
-                activity: formattedActivity
-            });
-        } catch (err) {
-            await runQuery('ROLLBACK');
-            throw err;
-        }
+        // Create activity_log table if it doesn't exist
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT NOT NULL,
+                user_id INTEGER,
+                metadata TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        `);
+        console.log('Activity log table initialized successfully');
     } catch (err) {
-        console.error('Error logging activity:', err);
-        res.status(500).json({ success: false, error: err.message });
+        console.error('Error initializing activity log table:', err);
+        throw err;
     }
-});
+}
 
+// Initialize notes table
+async function initializeNotesTable() {
+    try {
+        // Create notes table if it doesn't exist
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS notes (
+                note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                priority TEXT DEFAULT 'low',
+                category TEXT DEFAULT 'general',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        `);
+        console.log('Notes table initialized successfully');
+    } catch (err) {
+        console.error('Error initializing notes table:', err);
+        throw err;
+    }
+}
+
+// Initialize tables sequentially to avoid transaction conflicts
+async function initializeTables() {
+    try {
+        await initializeNotesTable();
+        await initializeActivityLogTable();
+        await initializeDefaultUsers();
+        console.log('All tables initialized successfully');
+    } catch (err) {
+        console.error('Error during table initialization:', err);
+    }
+}
+
+// Initialize tables when server starts
+initializeTables();
+
+// Get paginated activities endpoint
 app.get('/api/activities', async (req, res) => {
     try {
-        const { 
-            page = 1,
-            limit = 10,
-            action,
-            search,
-            user_id,
-            start_date,
-            end_date 
-        } = req.query;
-        
-        // Calculate offset
-        const offset = (parseInt(page) - 1) * parseInt(limit);
-        
-        // Build base query
-        let countQuery = `
-            SELECT COUNT(*) as total
-            FROM activity_log
-            LEFT JOIN users ON activity_log.user_id = users.id
-            WHERE 1=1
-        `;
-        
-        let query = `
-            SELECT 
-                activity_log.*, 
-                users.username,
-                users.role,
-                users.full_name as user_full_name
-            FROM activity_log
-            LEFT JOIN users ON activity_log.user_id = users.id
-            WHERE 1=1
-        `;
-        
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+        const search = req.query.search || '';
+        const action = req.query.action || '';
+
+        console.log('Pagination request:', { page, limit, offset, search, action });
+
+        // Build the WHERE clause based on filters
+        let whereClause = '1=1';
         const params = [];
-        const countParams = [];
-        
-        // Add filters
-        if (action) {
-            const condition = ` AND activity_log.action = ?`;
-            query += condition;
-            countQuery += condition;
-            params.push(action);
-            countParams.push(action);
-        }
-        
-        if (user_id) {
-            const condition = ` AND activity_log.user_id = ?`;
-            query += condition;
-            countQuery += condition;
-            params.push(user_id);
-            countParams.push(user_id);
-        }
 
-        if (start_date) {
-            const condition = ` AND activity_log.timestamp >= ?`;
-            query += condition;
-            countQuery += condition;
-            params.push(start_date);
-            countParams.push(start_date);
-        }
-        
-        if (end_date) {
-            const condition = ` AND activity_log.timestamp <= ?`;
-            query += condition;
-            countQuery += condition;
-            params.push(end_date);
-            countParams.push(end_date);
-        }
-        
         if (search) {
-            const condition = ` AND (
-                activity_log.details LIKE ? 
-                OR users.username LIKE ?
-                OR activity_log.action LIKE ?
-                OR activity_log.metadata LIKE ?
-            )`;
-            query += condition;
-            countQuery += condition;
-            const searchParam = `%${search}%`;
-            params.push(searchParam, searchParam, searchParam, searchParam);
-            countParams.push(searchParam, searchParam, searchParam, searchParam);
+            whereClause += ' AND (details LIKE ? OR users.username LIKE ? OR users.full_name LIKE ?)';
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
-        
-        // Add pagination
-        query += ` ORDER BY activity_log.timestamp DESC LIMIT ? OFFSET ?`;
-        params.push(parseInt(limit), offset);
 
-        // Get total count
-        const countResult = await getOne(countQuery, countParams);
-        const total = countResult ? countResult.total : 0;
-        const totalPages = Math.ceil(total / parseInt(limit));
-        const currentPage = parseInt(page);
+        if (action) {
+            whereClause += ' AND activity_log.action = ?';
+            params.push(action);
+        }
+
+        // Get total count for pagination
+        const totalCount = await getOne(
+            `SELECT COUNT(*) as count 
+             FROM activity_log 
+             LEFT JOIN users ON activity_log.user_id = users.id
+             WHERE ${whereClause}`,
+            params
+        );
+
+        console.log('Total records found:', totalCount.count);
 
         // Get paginated activities
-        const activities = await getAll(query, params);
-        
-        // Format activities
-        const formattedActivities = activities.map(activity => ({
-            ...activity,
-            metadata: activity.metadata ? JSON.parse(activity.metadata) : null,
-            username: activity.username || 'System',
-            role: activity.role || 'system',
-            user_full_name: activity.user_full_name || null
-        }));
+        const activities = await getAll(
+            `SELECT activity_log.*, users.username, users.full_name
+             FROM activity_log 
+             LEFT JOIN users ON activity_log.user_id = users.id
+             WHERE ${whereClause}
+             ORDER BY activity_log.timestamp DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
 
-        // Send response with pagination metadata
+        console.log('Records in current page:', activities.length);
+        console.log('Pagination details:', {
+            totalItems: totalCount.count,
+            itemsPerPage: limit,
+            totalPages: Math.ceil(totalCount.count / limit),
+            currentPage: page
+        });
+
+        const totalPages = Math.ceil(totalCount.count / limit);
+
         res.json({
             success: true,
             data: {
-                activities: formattedActivities,
+                activities,
                 pagination: {
-                    total,
-                    page: currentPage,
-                    limit: parseInt(limit),
+                    currentPage: page,
                     totalPages,
-                    hasNextPage: currentPage < totalPages,
-                    hasPrevPage: currentPage > 1
+                    totalItems: totalCount.count,
+                    itemsPerPage: limit,
+                    hasNextPage: page < totalPages,
+                    hasPrevPage: page > 1
                 }
             }
         });
     } catch (err) {
         console.error('Error fetching activities:', err);
-        res.status(500).json({ 
-            success: false, 
-            error: err.message 
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Log activity endpoint
+app.post('/api/activities', async (req, res) => {
+    try {
+        const { action, details, user_id, metadata } = req.body;
+        
+        // Validate required fields
+        if (!action || !details) {
+            return res.status(400).json({
+                success: false,
+                error: 'Action and details are required'
+            });
+        }
+
+        // Insert activity
+        const result = await runQuery(
+            `INSERT INTO activity_log (timestamp, action, details, user_id, metadata)
+             VALUES (datetime('now'), ?, ?, ?, ?)`,
+            [action, details, user_id, metadata ? JSON.stringify(metadata) : null]
+        );
+
+        // Get the inserted activity
+        const activity = await getOne(
+            `SELECT activity_log.*, users.username, users.full_name
+             FROM activity_log 
+             LEFT JOIN users ON activity_log.user_id = users.id
+             WHERE activity_log.id = ?`,
+            [result.lastID]
+        );
+
+        res.json({
+            success: true,
+            activity
         });
+    } catch (err) {
+        console.error('Error logging activity:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -1190,7 +1166,221 @@ app.get('/debug/items', async (req, res) => {
     }
 });
 
-// Handle all other routes by serving the index.html
+// Notes endpoints
+app.post('/api/notes', async (req, res) => {
+    const { title, content, priority, category, user_id } = req.body;
+
+    // Validate required fields
+    if (!title || !content || !user_id) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Title, content and user_id are required" 
+        });
+    }
+
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Insert note
+            const result = await runQuery(
+                `INSERT INTO notes (user_id, title, content, priority, category, created_at, updated_at) 
+                 VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+                [user_id, title, content, priority || 'low', category || 'general']
+            );
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details, user_id, metadata) 
+                 VALUES (datetime('now'), ?, ?, ?, ?)`,
+                ['add_note', `Added new note: ${title}`, user_id, JSON.stringify({ note_id: result.lastID, priority, category })]
+            );
+
+            await runQuery('COMMIT');
+
+            // Get the newly created note with user info
+            const note = await getOne(
+                `SELECT notes.*, users.username, users.full_name as author_name
+                 FROM notes 
+                 LEFT JOIN users ON notes.user_id = users.id
+                 WHERE notes.note_id = ?`,
+                [result.lastID]
+            );
+
+            res.status(201).json({
+                success: true,
+                message: 'Note added successfully',
+                note
+            });
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error adding note:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/notes', async (req, res) => {
+    try {
+        const notes = await getAll(
+            `SELECT notes.*, users.username, users.full_name as author_name
+             FROM notes 
+             LEFT JOIN users ON notes.user_id = users.id
+             ORDER BY notes.created_at DESC`
+        );
+
+        res.json({
+            success: true,
+            notes
+        });
+    } catch (err) {
+        console.error('Error fetching notes:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.put('/api/notes/:id', async (req, res) => {
+    const noteId = req.params.id;
+    const { title, content, priority, category } = req.body;
+
+    if (!title || !content) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Title and content are required" 
+        });
+    }
+
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Get the old note for activity logging
+            const oldNote = await getOne(
+                'SELECT * FROM notes WHERE note_id = ?',
+                [noteId]
+            );
+
+            if (!oldNote) {
+                return res.status(404).json({ success: false, error: 'Note not found' });
+            }
+
+            // Update note
+            await runQuery(
+                `UPDATE notes 
+                 SET title = ?, content = ?, priority = ?, category = ?, updated_at = datetime('now')
+                 WHERE note_id = ?`,
+                [title, content, priority || oldNote.priority, category || oldNote.category, noteId]
+            );
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details, user_id, metadata) 
+                 VALUES (datetime('now'), ?, ?, ?, ?)`,
+                ['edit_note', `Updated note: ${title}`, oldNote.user_id, 
+                 JSON.stringify({
+                     note_id: noteId,
+                     changes: {
+                         title: title !== oldNote.title ? { old: oldNote.title, new: title } : undefined,
+                         priority: priority !== oldNote.priority ? { old: oldNote.priority, new: priority } : undefined,
+                         category: category !== oldNote.category ? { old: oldNote.category, new: category } : undefined
+                     }
+                 })]
+            );
+
+            await runQuery('COMMIT');
+
+            // Get the updated note with user info
+            const note = await getOne(
+                `SELECT notes.*, users.username, users.full_name as author_name
+                 FROM notes 
+                 LEFT JOIN users ON notes.user_id = users.id
+                 WHERE notes.note_id = ?`,
+                [noteId]
+            );
+
+            res.json({
+                success: true,
+                message: 'Note updated successfully',
+                note
+            });
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error updating note:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.delete('/api/notes/:id', async (req, res) => {
+    const noteId = req.params.id;
+
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Get the note before deletion for activity logging
+            const note = await getOne(
+                'SELECT * FROM notes WHERE note_id = ?',
+                [noteId]
+            );
+
+            if (!note) {
+                return res.status(404).json({ success: false, error: 'Note not found' });
+            }
+
+            // Delete the note
+            await runQuery('DELETE FROM notes WHERE note_id = ?', [noteId]);
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details, user_id, metadata) 
+                 VALUES (datetime('now'), ?, ?, ?, ?)`,
+                ['delete_note', `Deleted note: ${note.title}`, note.user_id, 
+                 JSON.stringify({ note_id: noteId, title: note.title })]
+            );
+
+            await runQuery('COMMIT');
+
+            res.json({
+                success: true,
+                message: 'Note deleted successfully'
+            });
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error deleting note:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Get recent activities endpoint
+app.get('/api/recent-activities', async (req, res) => {
+    try {
+        const activities = await getAll(`
+            SELECT activity_log.*, users.username, users.full_name
+            FROM activity_log 
+            LEFT JOIN users ON activity_log.user_id = users.id
+            ORDER BY activity_log.timestamp DESC
+            LIMIT 2
+        `);
+
+        res.json({
+            success: true,
+            activities: activities
+        });
+    } catch (err) {
+        console.error('Error fetching recent activities:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Move catch-all route to the end
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, '..', 'index.html');
     console.log('Serving index.html for route:', req.url);
@@ -1201,4 +1391,4 @@ app.get('*', (req, res) => {
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
     console.log('Press Ctrl+C to stop');
-}); 
+});

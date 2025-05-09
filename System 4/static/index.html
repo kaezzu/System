@@ -6,6 +6,7 @@
     <title>Login - Emergency Response Team Inventory Management</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="activity-logger.js"></script>
     <style>
         .bg-custom {
             background-image: url('img/cdm_bg.png');
@@ -138,6 +139,9 @@
                     // Store login state and user info in session
                     sessionStorage.setItem('isLoggedIn', 'true');
                     sessionStorage.setItem('currentUser', JSON.stringify(data.user));
+                    
+                    // Log login activity
+                    await ActivityLogger.logUserActivity(ActivityLogger.ACTIONS.USER.LOGIN, data.user);
                     
                     // Handle remember me
                     if (rememberMe) {
