@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="shared.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet">
     <script>
         // Make functions globally available
         (function(window) {
@@ -26,16 +27,22 @@
 
             window.editItem = async function(id) {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`);
+                    const response = await fetch(`${API_BASE_URL}/api/items/${id}`);
                     if (!response.ok) throw new Error('Failed to fetch item');
                     
-                    const item = await response.json();
-                    
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to fetch item');
+                    }
+
+                    const item = data.item;
                     document.getElementById('itemName').value = item.name;
-                    document.getElementById('itemCategory').value = item.category;
+                    document.getElementById('itemCategory').value = item.category || '';
                     document.getElementById('itemStatus').value = item.status;
                     document.getElementById('itemAvailability').value = item.availability;
-                    document.getElementById('itemSupplier').value = item.supplier_id || '';
+                    
+                    // Store the item ID for update
+                    document.getElementById('addItemForm').setAttribute('data-item-id', item.product_id);
                     
                     showAddItemModal();
                 } catch (error) {
@@ -48,17 +55,16 @@
                 if (!confirm('Are you sure you want to delete this item?')) return;
                 
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/inventory/${id}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            username: JSON.parse(sessionStorage.getItem('currentUser'))?.username
-                        })
+                    const response = await fetch(`${API_BASE_URL}/api/items/${id}`, {
+                        method: 'DELETE'
                     });
 
                     if (!response.ok) throw new Error('Failed to delete item');
+                    
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to delete item');
+                    }
                     
                     showNotification('Item deleted successfully');
                     loadItems();
@@ -72,14 +78,92 @@
                 alert(message); // Simple alert for now
             };
 
+            window.showQuantityModal = function(id, name, currentQuantity) {
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center';
+                modal.id = 'quantityModal';
+                
+                modal.innerHTML = `
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-xl font-semibold text-secondary-900">Manage Quantity: ${name}</h2>
+                            <button onclick="closeQuantityModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <p class="text-sm text-secondary-600">Current Quantity: ${currentQuantity}</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-secondary-700 mb-1">Amount</label>
+                                <input type="number" id="quantityAmount" min="1" value="1" class="input-field">
+                            </div>
+                            <div class="flex space-x-4">
+                                <button onclick="updateQuantity(${id}, 'add')" class="flex-1 btn-primary bg-green-600 hover:bg-green-700">Add</button>
+                                <button onclick="updateQuantity(${id}, 'remove')" class="flex-1 btn-primary bg-red-600 hover:bg-red-700">Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+            };
+
+            window.closeQuantityModal = function() {
+                const modal = document.getElementById('quantityModal');
+                if (modal) {
+                    modal.remove();
+                }
+            };
+
+            window.updateQuantity = async function(id, action) {
+                const amount = parseInt(document.getElementById('quantityAmount').value);
+                if (!amount || amount <= 0) {
+                    showNotification('Please enter a valid amount', 'error');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/items/${id}/quantity/${action}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ amount })
+                    });
+
+                    if (!response.ok) throw new Error('Failed to update quantity');
+                    
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to update quantity');
+                    }
+                    
+                    showNotification(data.message);
+                    closeQuantityModal();
+                    loadItems();
+                } catch (error) {
+                    console.error('Error updating quantity:', error);
+                    showNotification(error.message, 'error');
+                }
+            };
+
             // Internal functions
             async function loadItems() {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/inventory`);
+                    const response = await fetch(`${API_BASE_URL}/api/items`);
                     if (!response.ok) throw new Error('Failed to load items');
-                    const items = await response.json();
+                    const data = await response.json();
                     
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to load items');
+                    }
+
+                    const items = data.items;
                     const tableBody = document.getElementById('inventoryTableBody');
+                    if (!tableBody) {
+                        console.error('Could not find inventory table body');
+                        return;
+                    }
                     tableBody.innerHTML = '';
                     
                     items.forEach(item => {
@@ -87,17 +171,34 @@
                         row.innerHTML = `
                             <td class="px-6 py-4">${item.product_id}</td>
                             <td class="px-6 py-4">${item.name}</td>
-                            <td class="px-6 py-4">${item.category_name || item.category}</td>
+                            <td class="px-6 py-4">${item.category || '-'}</td>
                             <td class="px-6 py-4">${item.status}</td>
                             <td class="px-6 py-4">${item.availability}</td>
-                            <td class="px-6 py-4">${item.supplier_name || '-'}</td>
-                            <td class="px-6 py-4">${item.notes ? 
-                                `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${item.priority}-100 text-${item.priority}-800">
-                                    ${item.notes.substring(0, 20)}${item.notes.length > 20 ? '...' : ''}
-                                </span>` : '-'}</td>
-                            <td class="px-6 py-4">
-                                <button onclick="editItem(${item.product_id})" class="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
-                                <button onclick="deleteItem(${item.product_id})" class="text-red-600 hover:text-red-900">Delete</button>
+                            <td class="px-6 py-4">${item.quantity || 0}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center justify-center space-x-3">
+                                    <button onclick="editItem(${item.product_id})"
+                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
+                                        title="Edit">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                        </svg>
+                                    </button>
+                                    <button onclick="deleteItem(${item.product_id})"
+                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-red-600 text-red-600 hover:bg-red-50 rounded-md transition-colors duration-150"
+                                        title="Delete">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                    </button>
+                                    <button onclick="showQuantityModal(${item.product_id}, '${item.name}', ${item.quantity || 0})"
+                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-green-600 text-green-600 hover:bg-green-50 rounded-md transition-colors duration-150"
+                                        title="Manage Quantity">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </td>
                         `;
                         tableBody.appendChild(row);
@@ -125,57 +226,58 @@
                 }
             }
 
-            async function loadSuppliers() {
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/suppliers`);
-                    if (!response.ok) throw new Error('Failed to load suppliers');
-                    const suppliers = await response.json();
-                    
-                    const supplierSelect = document.getElementById('itemSupplier');
-                    supplierSelect.innerHTML = '<option value="">Select Supplier</option>';
-                    suppliers.forEach(supplier => {
-                        supplierSelect.innerHTML += `<option value="${supplier.supplier_id}">${supplier.name}</option>`;
-                    });
-                } catch (error) {
-                    console.error('Error loading suppliers:', error);
-                    showNotification('Error loading suppliers', 'error');
-                }
-            }
-
             async function handleAddItem(event) {
                 event.preventDefault();
                 
                 const formData = new FormData(event.target);
-                const itemData = Object.fromEntries(formData.entries());
+                const itemData = {
+                    name: formData.get('name'),
+                    category: formData.get('category'),
+                    status: formData.get('status'),
+                    availability: formData.get('availability'),
+                    quantity: formData.get('quantity')
+                };
+
+                const itemId = event.target.getAttribute('data-item-id');
+                const isEdit = !!itemId;
                 
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/inventory`, {
-                        method: 'POST',
+                    const url = isEdit ? 
+                        `${API_BASE_URL}/api/items/${itemId}` : 
+                        `${API_BASE_URL}/api/items`;
+
+                    const response = await fetch(url, {
+                        method: isEdit ? 'PUT' : 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({
-                            ...itemData,
-                            username: JSON.parse(sessionStorage.getItem('currentUser'))?.username
-                        })
+                        body: JSON.stringify(itemData)
                     });
 
-                    if (!response.ok) throw new Error('Failed to add item');
+                    if (!response.ok) throw new Error(`Failed to ${isEdit ? 'update' : 'add'} item`);
                     
-                    showNotification('Item added successfully');
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.error || `Failed to ${isEdit ? 'update' : 'add'} item`);
+                    }
+                    
+                    showNotification(`Item ${isEdit ? 'updated' : 'added'} successfully`);
                     closeModal();
                     loadItems();
+
+                    // Reset the form and remove the item ID
+                    event.target.reset();
+                    event.target.removeAttribute('data-item-id');
                 } catch (error) {
-                    console.error('Error adding item:', error);
-                    showNotification('Error adding item', 'error');
+                    console.error(`Error ${isEdit ? 'updating' : 'adding'} item:`, error);
+                    showNotification(`Error ${isEdit ? 'updating' : 'adding'} item`, 'error');
                 }
             }
 
             // Initialize when DOM is ready
             document.addEventListener('DOMContentLoaded', () => {
+                // Load items
                 loadItems();
-                loadCategories();
-                loadSuppliers();
                 
                 // Add form submit event listener
                 const form = document.getElementById('addItemForm');
@@ -186,18 +288,38 @@
                 // Add search functionality
                 const searchInput = document.getElementById('searchInput');
                 if (searchInput) {
-                    searchInput.addEventListener('input', async (e) => {
+                    searchInput.addEventListener('input', debounce(async (e) => {
                         try {
-                            const response = await fetch(`${API_BASE_URL}/api/inventory/search?query=${e.target.value}`);
+                            if (!e.target.value.trim()) {
+                                loadItems();
+                                return;
+                            }
+                            const response = await fetch(`${API_BASE_URL}/api/items/search?query=${e.target.value}`);
                             if (!response.ok) throw new Error('Search failed');
-                            const items = await response.json();
-                            loadItems(items);
+                            const data = await response.json();
+                            if (!data.success) {
+                                throw new Error(data.error || 'Search failed');
+                            }
+                            loadItems(data.items);
                         } catch (error) {
                             console.error('Error searching:', error);
                         }
-                    });
+                    }, 300));
                 }
             });
+
+            // Helper function to debounce search input
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
         })(window);
     </script>
 </head>
@@ -320,8 +442,7 @@
                                     <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Category</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Availability</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Supplier</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Notes</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Quantity</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
@@ -349,9 +470,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Category</label>
-                    <select id="itemCategory" name="category" class="input-field" required>
-                        <option value="">Select Category</option>
-                    </select>
+                    <input type="text" id="itemCategory" name="category" class="input-field" required>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Status</label>
@@ -373,10 +492,8 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Supplier</label>
-                    <select id="itemSupplier" name="supplier_id" class="input-field" required>
-                        <option value="">Select Supplier</option>
-                    </select>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Initial Quantity</label>
+                    <input type="number" id="itemQuantity" name="quantity" class="input-field" min="0" value="0" required>
                 </div>
                 <button type="submit" class="w-full btn-primary">Save Item</button>
             </form>

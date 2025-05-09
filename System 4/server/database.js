@@ -132,7 +132,8 @@ async function initializeDatabase() {
             category TEXT,
             name TEXT NOT NULL,
             status TEXT,
-            availability TEXT
+            availability TEXT,
+            quantity INTEGER DEFAULT 0
         )`);
 
         // Note table (ERD)

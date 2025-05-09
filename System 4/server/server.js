@@ -79,164 +79,180 @@ app.post('/api/categories', async (req, res) => {
 });
 
 // Inventory items endpoints
-app.get('/api/inventory', async (req, res) => {
+app.get('/api/items', async (req, res) => {
     try {
-        const items = await getAll(`
-            SELECT i.*, s.name as supplier_name, c.name as category_name,
-                   n.content as notes, n.priority
-            FROM items i 
-            LEFT JOIN suppliers s ON i.supplier_id = s.supplier_id
-            LEFT JOIN categories c ON i.category = c.id
-            LEFT JOIN notes n ON i.product_id = n.item_id
-        `);
-        res.json(items);
+        const items = await getAll('SELECT * FROM items ORDER BY product_id');
+        res.setHeader('Content-Type', 'application/json');
+        res.json({ success: true, items });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error fetching items:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.post('/api/inventory', async (req, res) => {
+app.post('/api/items', async (req, res) => {
+    const { name, category, status, availability } = req.body;
+
+    // Validate required fields
+    if (!name) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Name is required" 
+        });
+    }
+
     try {
-        const { name, category, status, availability, supplier_id, notes } = req.body;
-        
-        // Start a transaction
+        // Start transaction
         await runQuery('BEGIN TRANSACTION');
-        
+
         try {
-            // Insert the item
-            const itemResult = await runQuery(
-                `INSERT INTO items (name, category, status, availability, supplier_id) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [name, category, status, availability, supplier_id]
-            );
-            
-            // If notes provided, add them
-            if (notes) {
-                await runQuery(
-                    `INSERT INTO notes (item_id, content, priority) 
-                     VALUES (?, ?, ?)`,
-                    [itemResult.lastID, notes.content, notes.priority]
-                );
-            }
-            
-            // Log the activity
-            await runQuery(
-                `INSERT INTO user_activities (timestamp, username, action, details) 
+            // Insert item
+            const result = await runQuery(
+                `INSERT INTO items (name, category, status, availability) 
                  VALUES (?, ?, ?, ?)`,
-                [new Date().toISOString(), req.body.username || 'system', 'add_item', `Added item: ${name}`]
+                [name, category || null, status || null, availability || null]
             );
-            
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (datetime('now'), ?, ?)`,
+                ['add_item', `Added new item: ${name}`]
+            );
+
             await runQuery('COMMIT');
-            
-            // Return the created item
+
+            // Get the newly created item
             const item = await getOne(
-                `SELECT i.*, s.name as supplier_name, n.content as notes, n.priority
-                 FROM items i 
-                 LEFT JOIN suppliers s ON i.supplier_id = s.supplier_id
-                 LEFT JOIN notes n ON i.product_id = n.item_id
-                 WHERE i.product_id = ?`,
-                [itemResult.lastID]
+                'SELECT * FROM items WHERE product_id = ?',
+                [result.lastID]
             );
-            
-            res.json(item);
+
+            res.status(201).json({
+                success: true,
+                message: 'Item added successfully',
+                item
+            });
         } catch (err) {
             await runQuery('ROLLBACK');
             throw err;
         }
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error adding item:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.put('/api/inventory/:id', async (req, res) => {
+app.get('/api/items/:id', async (req, res) => {
     try {
-        const { name, category, status, availability, supplier_id, notes } = req.body;
-        const itemId = req.params.id;
+        const item = await getOne('SELECT * FROM items WHERE product_id = ?', [req.params.id]);
         
-        // Start a transaction
+        if (!item) {
+            return res.status(404).json({ success: false, error: 'Item not found' });
+        }
+
+        res.json({ success: true, item });
+    } catch (err) {
+        console.error('Error fetching item:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.put('/api/items/:id', async (req, res) => {
+    const itemId = req.params.id;
+    const { name, category, status, availability } = req.body;
+
+    if (!name) {
+        return res.status(400).json({ 
+            success: false, 
+            error: "Name is required" 
+        });
+    }
+
+    try {
         await runQuery('BEGIN TRANSACTION');
-        
+
         try {
-            // Update the item
             await runQuery(
                 `UPDATE items 
-                 SET name = ?, category = ?, status = ?, 
-                     availability = ?, supplier_id = ?
+                 SET name = ?, category = ?, status = ?, availability = ?
                  WHERE product_id = ?`,
-                [name, category, status, availability, supplier_id, itemId]
+                [name, category || null, status || null, availability || null, itemId]
             );
-            
-            // Update or insert notes
-            if (notes) {
-                await runQuery(
-                    `INSERT OR REPLACE INTO notes (item_id, content, priority) 
-                     VALUES (?, ?, ?)`,
-                    [itemId, notes.content, notes.priority]
-                );
-            }
-            
-            // Log the activity
-        await runQuery(
-                `INSERT INTO user_activities (timestamp, username, action, details) 
-                 VALUES (?, ?, ?, ?)`,
-                [new Date().toISOString(), req.body.username || 'system', 'update_item', `Updated item: ${name}`]
+
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (datetime('now'), ?, ?)`,
+                ['update_item', `Updated item: ${name}`]
             );
-            
+
             await runQuery('COMMIT');
-            
-            // Return the updated item
+
             const item = await getOne(
-                `SELECT i.*, s.name as supplier_name, n.content as notes, n.priority
-                 FROM items i 
-                 LEFT JOIN suppliers s ON i.supplier_id = s.supplier_id
-                 LEFT JOIN notes n ON i.product_id = n.item_id
-                 WHERE i.product_id = ?`,
+                'SELECT * FROM items WHERE product_id = ?',
                 [itemId]
             );
-            
-            res.json(item);
+
+            if (!item) {
+                return res.status(404).json({ success: false, error: 'Item not found' });
+            }
+
+            res.json({
+                success: true,
+                message: 'Item updated successfully',
+                item
+            });
         } catch (err) {
             await runQuery('ROLLBACK');
             throw err;
         }
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error updating item:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.delete('/api/inventory/:id', async (req, res) => {
+app.delete('/api/items/:id', async (req, res) => {
+    const itemId = req.params.id;
+
     try {
-        const itemId = req.params.id;
-        
-        // Start a transaction
         await runQuery('BEGIN TRANSACTION');
-        
+
         try {
             // Get item details for activity log
-            const item = await getOne('SELECT name FROM items WHERE product_id = ?', [itemId]);
-            
-            // Delete related notes first
-            await runQuery('DELETE FROM notes WHERE item_id = ?', [itemId]);
-            
-            // Delete the item
-            await runQuery('DELETE FROM items WHERE product_id = ?', [itemId]);
-            
-            // Log the activity
-            await runQuery(
-                `INSERT INTO user_activities (timestamp, username, action, details) 
-                 VALUES (?, ?, ?, ?)`,
-                [new Date().toISOString(), req.body.username || 'system', 'delete_item', `Deleted item: ${item.name}`]
+            const item = await getOne(
+                'SELECT name FROM items WHERE product_id = ?',
+                [itemId]
             );
-            
+
+            if (!item) {
+                await runQuery('ROLLBACK');
+                return res.status(404).json({ success: false, error: 'Item not found' });
+            }
+
+            // Delete item
+            await runQuery('DELETE FROM items WHERE product_id = ?', [itemId]);
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (datetime('now'), ?, ?)`,
+                ['delete_item', `Deleted item: ${item.name}`]
+            );
+
             await runQuery('COMMIT');
-            
-        res.json({ message: 'Item deleted successfully' });
+
+            res.json({
+                success: true,
+                message: 'Item deleted successfully'
+            });
         } catch (err) {
             await runQuery('ROLLBACK');
             throw err;
         }
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error deleting item:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -687,171 +703,169 @@ app.get('/api/inventory/search', async (req, res) => {
     }
 });
 
-// Serve the supplier page with server-side rendered data
-app.get('/supplier', async (req, res) => {
+// Serve the inventory page with server-side rendered data
+app.get('/inventory', async (req, res) => {
     try {
-        // Get suppliers from database
-        const suppliers = await getAll('SELECT * FROM suppliers ORDER BY name');
-        console.log('Fetched suppliers:', suppliers); // Debug log
+        // Get items from database
+        const items = await getAll('SELECT * FROM items ORDER BY name');
+        console.log('Fetched items:', items); // Debug log
 
         // Read the HTML template
         let html = await require('fs').promises.readFile(
-            path.join(__dirname, '..', 'supplier.html'), 
+            path.join(__dirname, '..', 'inventory.html'), 
             'utf8'
         );
 
         // Generate the table rows HTML
-        const tableRows = suppliers.map(supplier => `
+        const tableRows = items.map(item => `
             <tr>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${supplier.name || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${supplier.contact || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${supplier.email || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${supplier.phone || '-'}</td>
-                <td class="px-6 py-4 text-sm text-secondary-900">${supplier.address || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${item.product_id || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${item.name || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${item.category || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${item.status || '-'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900">${item.availability || '-'}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-secondary-900 actions-column">
-                    <button onclick="editSupplier(${supplier.supplier_id})" class="text-primary-600 hover:text-primary-900 mr-3">Edit</button>
-                    <button onclick="deleteSupplier(${supplier.supplier_id})" class="text-red-600 hover:text-red-900">Delete</button>
+                    <button onclick="editItem(${item.product_id})" class="text-primary-600 hover:text-primary-900 mr-3">Edit</button>
+                    <button onclick="deleteItem(${item.product_id})" class="text-red-600 hover:text-red-900">Delete</button>
                 </td>
             </tr>
         `).join('');
 
-        console.log('Generated table rows:', tableRows); // Debug log
-
         // Find the table body position
-        const tableBodyStart = html.indexOf('<tbody id="supplierTableBody"');
+        const tableBodyStart = html.indexOf('<tbody id="inventoryTableBody"');
         const tableBodyEnd = html.indexOf('</tbody>', tableBodyStart) + 8;
         
         // Replace the entire table body with our new content
         html = html.slice(0, tableBodyStart) +
-            '<tbody id="supplierTableBody" class="bg-white divide-y divide-secondary-200">' +
+            '<tbody id="inventoryTableBody" class="bg-white divide-y divide-secondary-200">' +
             tableRows +
             '</tbody>' +
             html.slice(tableBodyEnd);
 
         res.send(html);
     } catch (err) {
-        console.error('Error rendering supplier page:', err);
-        res.status(500).send('Error loading suppliers: ' + err.message);
+        console.error('Error rendering inventory page:', err);
+        res.status(500).send('Error loading inventory: ' + err.message);
     }
 });
 
-// Handle supplier form submission
-app.post('/supplier/add', async (req, res) => {
+// Handle inventory form submission
+app.post('/inventory/add', async (req, res) => {
     try {
-        console.log('Adding supplier:', req.body);
-        const { name, contact, email, phone, address } = req.body;
+        console.log('Adding item:', req.body);
+        const { name, category, status, availability } = req.body;
         
         if (!name || name.trim() === '') {
-            console.log('Company name is missing');
-            return res.status(400).send('Company name is required');
+            console.log('Item name is missing');
+            return res.status(400).send('Item name is required');
         }
 
         await runQuery('BEGIN TRANSACTION');
 
         try {
-            // Insert the supplier
+            // Insert the item
             const result = await runQuery(
-                `INSERT INTO suppliers (name, contact, email, phone, address) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [name.trim(), contact?.trim(), email?.trim(), phone?.trim(), address?.trim()]
+                `INSERT INTO items (name, category, status, availability) 
+                 VALUES (?, ?, ?, ?)`,
+                [name.trim(), category?.trim(), status?.trim(), availability?.trim()]
             );
 
             // Log the activity
             await runQuery(
-                `INSERT INTO user_activities (timestamp, username, action, details) 
-                 VALUES (?, ?, ?, ?)`,
-                [new Date().toISOString(), 'system', 'add_supplier', `Added supplier: ${name}`]
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (?, ?, ?)`,
+                [new Date().toISOString(), 'add_item', `Added item: ${name}`]
             );
 
             await runQuery('COMMIT');
-            res.redirect('/supplier');
+            res.redirect('/inventory');
         } catch (err) {
             await runQuery('ROLLBACK');
             throw err;
         }
     } catch (err) {
-        console.error('Error adding supplier:', err);
-        res.status(500).send('Error adding supplier: ' + err.message);
+        console.error('Error adding item:', err);
+        res.status(500).send('Error adding item: ' + err.message);
     }
 });
 
-// Handle supplier deletion
-app.post('/supplier/delete/:id', async (req, res) => {
+// Handle inventory deletion
+app.post('/inventory/delete/:id', async (req, res) => {
     try {
-        const supplierId = req.params.id;
+        const itemId = req.params.id;
 
         await runQuery('BEGIN TRANSACTION');
 
         try {
-            // Get supplier details for activity log
-            const supplier = await getOne(
-                'SELECT name FROM suppliers WHERE supplier_id = ?',
-                [supplierId]
+            // Get item details for activity log
+            const item = await getOne(
+                'SELECT name FROM items WHERE product_id = ?',
+                [itemId]
             );
 
-            if (!supplier) {
-                return res.status(404).send('Supplier not found');
+            if (!item) {
+                return res.status(404).send('Item not found');
             }
 
-            // Delete the supplier
-            await runQuery('DELETE FROM suppliers WHERE supplier_id = ?', [supplierId]);
+            // Delete the item
+            await runQuery('DELETE FROM items WHERE product_id = ?', [itemId]);
 
             // Log the activity
             await runQuery(
-                `INSERT INTO user_activities (timestamp, username, action, details) 
-                 VALUES (?, ?, ?, ?)`,
-                [new Date().toISOString(), 'system', 'delete_supplier', `Deleted supplier: ${supplier.name}`]
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (?, ?, ?)`,
+                [new Date().toISOString(), 'delete_item', `Deleted item: ${item.name}`]
             );
 
             await runQuery('COMMIT');
-            res.redirect('/supplier');
+            res.redirect('/inventory');
         } catch (err) {
             await runQuery('ROLLBACK');
             throw err;
         }
     } catch (err) {
-        console.error('Error deleting supplier:', err);
-        res.status(500).send('Error deleting supplier');
+        console.error('Error deleting item:', err);
+        res.status(500).send('Error deleting item');
     }
 });
 
-// Handle supplier update
-app.post('/supplier/update/:id', async (req, res) => {
+// Handle inventory update
+app.post('/inventory/update/:id', async (req, res) => {
     try {
-        const { name, contact, email, phone, address } = req.body;
-        const supplierId = req.params.id;
+        const { name, category, status, availability } = req.body;
+        const itemId = req.params.id;
 
         if (!name) {
-            return res.status(400).send('Company name is required');
+            return res.status(400).send('Item name is required');
         }
 
         await runQuery('BEGIN TRANSACTION');
 
         try {
-            // Update the supplier
+            // Update the item
             await runQuery(
-                `UPDATE suppliers 
-                 SET name = ?, contact = ?, email = ?, phone = ?, address = ?
-                 WHERE supplier_id = ?`,
-                [name, contact, email, phone, address, supplierId]
+                `UPDATE items 
+                 SET name = ?, category = ?, status = ?, availability = ?
+                 WHERE product_id = ?`,
+                [name, category, status, availability, itemId]
             );
 
             // Log the activity
             await runQuery(
-                `INSERT INTO user_activities (timestamp, username, action, details) 
-                 VALUES (?, ?, ?, ?)`,
-                [new Date().toISOString(), 'system', 'update_supplier', `Updated supplier: ${name}`]
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (?, ?, ?)`,
+                [new Date().toISOString(), 'update_item', `Updated item: ${name}`]
             );
 
             await runQuery('COMMIT');
-            res.redirect('/supplier');
+            res.redirect('/inventory');
         } catch (err) {
             await runQuery('ROLLBACK');
             throw err;
         }
     } catch (err) {
-        console.error('Error updating supplier:', err);
-        res.status(500).send('Error updating supplier');
+        console.error('Error updating item:', err);
+        res.status(500).send('Error updating item');
     }
 });
 
@@ -877,6 +891,32 @@ app.get('/debug/suppliers', async (req, res) => {
         });
     } catch (err) {
         console.error('Error checking suppliers table:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Debug endpoint to check items table
+app.get('/debug/items', async (req, res) => {
+    try {
+        // Get table info
+        const tableInfo = await getAll("SELECT sql FROM sqlite_master WHERE type='table' AND name='items'");
+        console.log('Items table schema:', tableInfo);
+
+        // Get items count
+        const count = await getOne('SELECT COUNT(*) as count FROM items');
+        console.log('Items count:', count);
+
+        // Get all items
+        const items = await getAll('SELECT * FROM items');
+        console.log('All items:', items);
+
+        res.json({
+            schema: tableInfo,
+            count: count,
+            items: items
+        });
+    } catch (err) {
+        console.error('Error checking items table:', err);
         res.status(500).json({ error: err.message });
     }
 });
