@@ -16,7 +16,7 @@ app.use(cors({
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '..')));
+app.use(express.static(path.join(__dirname, '..', 'static')));
 
 // Debug middleware to log requests
 app.use((req, res, next) => {
@@ -78,10 +78,43 @@ app.post('/api/categories', async (req, res) => {
     }
 });
 
+// Helper function to generate custom item ID
+async function generateItemId() {
+    // Get current date in YYYYMMDD format
+    const date = new Date();
+    const dateStr = date.getFullYear() +
+        String(date.getMonth() + 1).padStart(2, '0') +
+        String(date.getDate()).padStart(2, '0');
+    
+    try {
+        // Get the latest ID for today
+        const result = await getOne(`
+            SELECT product_id 
+            FROM items 
+            WHERE product_id LIKE '${dateStr}%' 
+            ORDER BY product_id DESC 
+            LIMIT 1
+        `);
+
+        let sequentialNumber = 1;
+        if (result && result.product_id) {
+            // Extract the sequential number from the last ID and increment it
+            const lastSequential = parseInt(result.product_id.slice(-3));
+            sequentialNumber = lastSequential + 1;
+        }
+
+        // Combine date and sequential number (padded to 3 digits)
+        return `${dateStr}${String(sequentialNumber).padStart(3, '0')}`;
+    } catch (err) {
+        console.error('Error generating item ID:', err);
+        throw err;
+    }
+}
+
 // Inventory items endpoints
 app.get('/api/items', async (req, res) => {
     try {
-        const items = await getAll('SELECT * FROM items ORDER BY product_id');
+        const items = await getAll('SELECT * FROM items ORDER BY product_id DESC');
         res.setHeader('Content-Type', 'application/json');
         res.json({ success: true, items });
     } catch (err) {
@@ -106,11 +139,14 @@ app.post('/api/items', async (req, res) => {
         await runQuery('BEGIN TRANSACTION');
 
         try {
-            // Insert item
-            const result = await runQuery(
-                `INSERT INTO items (name, category, status, availability) 
-                 VALUES (?, ?, ?, ?)`,
-                [name, category || null, status || null, availability || null]
+            // Generate custom ID
+            const productId = await generateItemId();
+
+            // Insert item with custom ID
+            await runQuery(
+                `INSERT INTO items (product_id, name, category, status, availability) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [productId, name, category || null, status || null, availability || null]
             );
 
             // Log activity
@@ -125,7 +161,7 @@ app.post('/api/items', async (req, res) => {
             // Get the newly created item
             const item = await getOne(
                 'SELECT * FROM items WHERE product_id = ?',
-                [result.lastID]
+                [productId]
             );
 
             res.status(201).json({
@@ -212,25 +248,84 @@ app.put('/api/items/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/items/:id', async (req, res) => {
+// Update quantity endpoint
+app.post('/api/items/:id/quantity/:action', async (req, res) => {
     const itemId = req.params.id;
+    const action = req.params.action;
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+        return res.status(400).json({
+            success: false,
+            error: "Amount must be a positive number"
+        });
+    }
 
     try {
         await runQuery('BEGIN TRANSACTION');
 
         try {
-            // Get item details for activity log
-            const item = await getOne(
-                'SELECT name FROM items WHERE product_id = ?',
-                [itemId]
-            );
-
+            // Get current item details
+            const item = await getOne('SELECT * FROM items WHERE product_id = ?', [itemId]);
+            
             if (!item) {
                 await runQuery('ROLLBACK');
                 return res.status(404).json({ success: false, error: 'Item not found' });
             }
 
-            // Delete item
+            // Calculate new quantity
+            const currentQuantity = item.quantity || 0;
+            const newQuantity = action === 'add' 
+                ? currentQuantity + parseInt(amount) 
+                : Math.max(0, currentQuantity - parseInt(amount));
+
+            // Update item quantity
+            await runQuery(
+                'UPDATE items SET quantity = ? WHERE product_id = ?',
+                [newQuantity, itemId]
+            );
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (datetime('now'), ?, ?)`,
+                ['update_quantity', `${action === 'add' ? 'Added' : 'Removed'} ${amount} units to/from item: ${item.name}`]
+            );
+
+            await runQuery('COMMIT');
+
+            res.json({
+                success: true,
+                message: `Quantity ${action === 'add' ? 'added' : 'removed'} successfully`,
+                newQuantity: newQuantity
+            });
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error updating quantity:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Delete item endpoint
+app.delete('/api/items/:id', async (req, res) => {
+    const itemId = req.params.id;
+    
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Get item details for logging
+            const item = await getOne('SELECT * FROM items WHERE product_id = ?', [itemId]);
+            
+            if (!item) {
+                await runQuery('ROLLBACK');
+                return res.status(404).json({ success: false, error: 'Item not found' });
+            }
+
+            // Delete the item
             await runQuery('DELETE FROM items WHERE product_id = ?', [itemId]);
 
             // Log activity
@@ -256,29 +351,205 @@ app.delete('/api/items/:id', async (req, res) => {
     }
 });
 
-// User activities endpoints
-app.get('/api/activities', async (req, res) => {
+// Activity log endpoints
+app.post('/api/activities', async (req, res) => {
+    const { action, details, user_id, timestamp, metadata } = req.body;
+
+    if (!action || !details) {
+        return res.status(400).json({
+            success: false,
+            error: "Action and details are required"
+        });
+    }
+
     try {
-        const activities = await getAll('SELECT * FROM user_activities ORDER BY timestamp DESC LIMIT 1000');
-        res.json(activities);
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Insert the activity
+            const result = await runQuery(
+                `INSERT INTO activity_log (
+                    timestamp, 
+                    action, 
+                    details, 
+                    user_id,
+                    metadata
+                ) VALUES (?, ?, ?, ?, ?)`,
+                [
+                    timestamp || new Date().toISOString(),
+                    action,
+                    details,
+                    user_id,
+                    metadata ? JSON.stringify(metadata) : null
+                ]
+            );
+
+            // Get the created activity with user info
+            const activity = await getOne(
+                `SELECT 
+                    activity_log.*, 
+                    users.username,
+                    users.role,
+                    users.full_name as user_full_name
+                FROM activity_log
+                LEFT JOIN users ON activity_log.user_id = users.id
+                WHERE activity_log.id = ?`,
+                [result.lastID]
+            );
+
+            await runQuery('COMMIT');
+
+            // Format the response
+            const formattedActivity = {
+                ...activity,
+                metadata: activity.metadata ? JSON.parse(activity.metadata) : null,
+                username: activity.username || 'System',
+                role: activity.role || 'system',
+                user_full_name: activity.user_full_name || null
+            };
+
+            res.status(201).json({
+                success: true,
+                message: 'Activity logged successfully',
+                activity: formattedActivity
+            });
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error logging activity:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
-app.post('/api/activities', async (req, res) => {
+app.get('/api/activities', async (req, res) => {
     try {
-        const { username, action, details } = req.body;
-        const timestamp = new Date().toISOString();
+        const { 
+            page = 1,
+            limit = 10,
+            action,
+            search,
+            user_id,
+            start_date,
+            end_date 
+        } = req.query;
         
-        const result = await runQuery(
-            'INSERT INTO user_activities (timestamp, username, action, details) VALUES (?, ?, ?, ?)',
-            [timestamp, username, action, details]
-        );
+        // Calculate offset
+        const offset = (parseInt(page) - 1) * parseInt(limit);
         
-        res.json({ id: result.lastID, timestamp, username, action, details });
+        // Build base query
+        let countQuery = `
+            SELECT COUNT(*) as total
+            FROM activity_log
+            LEFT JOIN users ON activity_log.user_id = users.id
+            WHERE 1=1
+        `;
+        
+        let query = `
+            SELECT 
+                activity_log.*, 
+                users.username,
+                users.role,
+                users.full_name as user_full_name
+            FROM activity_log
+            LEFT JOIN users ON activity_log.user_id = users.id
+            WHERE 1=1
+        `;
+        
+        const params = [];
+        const countParams = [];
+        
+        // Add filters
+        if (action) {
+            const condition = ` AND activity_log.action = ?`;
+            query += condition;
+            countQuery += condition;
+            params.push(action);
+            countParams.push(action);
+        }
+        
+        if (user_id) {
+            const condition = ` AND activity_log.user_id = ?`;
+            query += condition;
+            countQuery += condition;
+            params.push(user_id);
+            countParams.push(user_id);
+        }
+
+        if (start_date) {
+            const condition = ` AND activity_log.timestamp >= ?`;
+            query += condition;
+            countQuery += condition;
+            params.push(start_date);
+            countParams.push(start_date);
+        }
+        
+        if (end_date) {
+            const condition = ` AND activity_log.timestamp <= ?`;
+            query += condition;
+            countQuery += condition;
+            params.push(end_date);
+            countParams.push(end_date);
+        }
+        
+        if (search) {
+            const condition = ` AND (
+                activity_log.details LIKE ? 
+                OR users.username LIKE ?
+                OR activity_log.action LIKE ?
+                OR activity_log.metadata LIKE ?
+            )`;
+            query += condition;
+            countQuery += condition;
+            const searchParam = `%${search}%`;
+            params.push(searchParam, searchParam, searchParam, searchParam);
+            countParams.push(searchParam, searchParam, searchParam, searchParam);
+        }
+        
+        // Add pagination
+        query += ` ORDER BY activity_log.timestamp DESC LIMIT ? OFFSET ?`;
+        params.push(parseInt(limit), offset);
+
+        // Get total count
+        const countResult = await getOne(countQuery, countParams);
+        const total = countResult ? countResult.total : 0;
+        const totalPages = Math.ceil(total / parseInt(limit));
+        const currentPage = parseInt(page);
+
+        // Get paginated activities
+        const activities = await getAll(query, params);
+        
+        // Format activities
+        const formattedActivities = activities.map(activity => ({
+            ...activity,
+            metadata: activity.metadata ? JSON.parse(activity.metadata) : null,
+            username: activity.username || 'System',
+            role: activity.role || 'system',
+            user_full_name: activity.user_full_name || null
+        }));
+
+        // Send response with pagination metadata
+        res.json({
+            success: true,
+            data: {
+                activities: formattedActivities,
+                pagination: {
+                    total,
+                    page: currentPage,
+                    limit: parseInt(limit),
+                    totalPages,
+                    hasNextPage: currentPage < totalPages,
+                    hasPrevPage: currentPage > 1
+                }
+            }
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error fetching activities:', err);
+        res.status(500).json({ 
+            success: false, 
+            error: err.message 
+        });
     }
 });
 
@@ -461,11 +732,43 @@ app.get('/', (req, res) => {
     res.sendFile(indexPath);
 });
 
-// Supplier Management Endpoints
+// Helper function to generate custom supplier ID
+async function generateSupplierId() {
+    // Get current date in YYYYMMDD format
+    const date = new Date();
+    const dateStr = date.getFullYear() +
+        String(date.getMonth() + 1).padStart(2, '0') +
+        String(date.getDate()).padStart(2, '0');
+    
+    try {
+        // Get the latest ID for today
+        const result = await getOne(`
+            SELECT supplier_id 
+            FROM suppliers 
+            WHERE supplier_id LIKE 'S${dateStr}%' 
+            ORDER BY supplier_id DESC 
+            LIMIT 1
+        `);
+
+        let sequentialNumber = 1;
+        if (result && result.supplier_id) {
+            // Extract the sequential number from the last ID and increment it
+            const lastSequential = parseInt(result.supplier_id.slice(-3));
+            sequentialNumber = lastSequential + 1;
+        }
+
+        // Combine date and sequential number (padded to 3 digits)
+        return `S${dateStr}${String(sequentialNumber).padStart(3, '0')}`;
+    } catch (err) {
+        console.error('Error generating supplier ID:', err);
+        throw err;
+    }
+}
+
+// Supplier endpoints
 app.get('/api/suppliers', async (req, res) => {
     try {
-        const suppliers = await getAll('SELECT * FROM suppliers ORDER BY supplier_id');
-        res.setHeader('Content-Type', 'application/json');
+        const suppliers = await getAll('SELECT * FROM suppliers ORDER BY supplier_id DESC');
         res.json({ success: true, suppliers });
     } catch (err) {
         console.error('Error fetching suppliers:', err);
@@ -478,27 +781,29 @@ app.post('/api/suppliers', async (req, res) => {
 
     // Validate required fields
     if (!name || !contact || !email) {
-        return res.status(400).json({ 
-            success: false, 
-            error: "Name, contact person, and email are required" 
+        return res.status(400).json({
+            success: false,
+            error: "Name, contact, and email are required"
         });
     }
 
     try {
-        // Start transaction
         await runQuery('BEGIN TRANSACTION');
 
         try {
-            // Insert supplier
-            const result = await runQuery(
-                `INSERT INTO suppliers (name, contact, email, phone, address) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [name, contact, email, phone || null, address || null]
+            // Generate custom ID
+            const supplierId = await generateSupplierId();
+
+            // Insert supplier with custom ID
+            await runQuery(
+                `INSERT INTO suppliers (supplier_id, name, contact, email, phone, address)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [supplierId, name, contact, email, phone || null, address || null]
             );
 
             // Log activity
             await runQuery(
-                `INSERT INTO activity_log (timestamp, action, details) 
+                `INSERT INTO activity_log (timestamp, action, details)
                  VALUES (datetime('now'), ?, ?)`,
                 ['add_supplier', `Added new supplier: ${name}`]
             );
@@ -508,7 +813,7 @@ app.post('/api/suppliers', async (req, res) => {
             // Get the newly created supplier
             const supplier = await getOne(
                 'SELECT * FROM suppliers WHERE supplier_id = ?',
-                [result.lastID]
+                [supplierId]
             );
 
             res.status(201).json({
@@ -621,42 +926,6 @@ app.delete('/api/suppliers/:id', async (req, res) => {
     } catch (err) {
         console.error('Error deleting supplier:', err);
         res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// Items endpoints
-app.get('/api/items', async (req, res) => {
-    try {
-        const items = await getAll(`
-            SELECT i.*, s.name as supplier_name 
-            FROM items i 
-            LEFT JOIN suppliers s ON i.supplier_id = s.supplier_id
-        `);
-        res.json(items);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/items', async (req, res) => {
-    try {
-        const { name, category, status, availability, supplier_id } = req.body;
-        
-        const result = await runQuery(
-            `INSERT INTO items (name, category, status, availability) 
-             VALUES (?, ?, ?, ?)`,
-            [name, category, status, availability]
-        );
-        
-        res.json({ 
-            product_id: result.lastID,
-            name,
-            category,
-            status,
-            availability
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
     }
 });
 

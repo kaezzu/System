@@ -108,7 +108,7 @@ async function initializeDatabase() {
 
         // Supplier table
         db.run(`CREATE TABLE IF NOT EXISTS suppliers (
-            supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             contact TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -123,12 +123,16 @@ async function initializeDatabase() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME NOT NULL,
             action TEXT NOT NULL,
-            details TEXT NOT NULL
+            details TEXT NOT NULL,
+            user_id INTEGER,
+            metadata TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )`);
 
         // Items table (ERD)
         db.run(`CREATE TABLE IF NOT EXISTS items (
-            product_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id TEXT PRIMARY KEY,
             category TEXT,
             name TEXT NOT NULL,
             status TEXT,
