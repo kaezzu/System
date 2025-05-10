@@ -6,6 +6,16 @@
     <title>Notifications - Colegio de Muntinlupa</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            box-shadow: 0 2px 8px 0 rgba(0,0,0,0.07);
+            background: #fff;
+            transition: box-shadow 0.2s;
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
     <script>
@@ -18,7 +28,7 @@
     <div class="flex h-screen">
         <!-- Sidebar -->
         <div class="w-64 bg-white shadow-lg">
-            <div class="p-4 border-b border-secondary-200">
+            <div class="h-28 flex items-center border-b border-secondary-200 px-4 pt-6 pb-6" style="padding-top: 6px; padding-bottom: 6px;">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,6 +243,19 @@
             sessionStorage.removeItem('isLoggedIn');
             window.location.href = 'index.html';
         }
+
+        // Sticky header on scroll
+        document.addEventListener('DOMContentLoaded', function() {
+            const header = document.querySelector('header');
+            const stickyClass = 'sticky-header';
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 0) {
+                    header.classList.add(stickyClass);
+                } else {
+                    header.classList.remove(stickyClass);
+                }
+            });
+        });
     </script>
 </body>
 </html> 

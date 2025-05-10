@@ -176,6 +176,14 @@
                 padding: 1.2rem;
             }
         }
+        .sticky-header {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            box-shadow: 0 2px 8px 0 rgba(0,0,0,0.07);
+            background: #fff;
+            transition: box-shadow 0.2s;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
@@ -189,8 +197,8 @@
     <div class="flex h-screen">
         <!-- Sidebar -->
         <div class="w-64 bg-white shadow-lg">
-            <div class="p-4 border-b border-secondary-200">
-                <div class="flex items-center space-x-3">
+            <div class="h-28 flex items-center border-b border-secondary-200 px-4 pt-6 pb-6" style="padding-top: 6px; padding-bottom: 6px;">
+                <div class="flex items-center space-x-3 w-full">
                     <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
@@ -565,12 +573,10 @@
                     return;
                 }
 
-                // Sticky note color/rotation classes
-                const stickyColors = ['sticky-yellow', 'sticky-pink', 'sticky-blue', 'sticky-green', 'sticky-orange'];
+                // All sticky notes use only sticky-blue
                 container.innerHTML = notes.map((note, i) => {
-                    const color = stickyColors[i % stickyColors.length];
                     return `
-                        <div class="sticky-note ${color}" style="cursor:pointer;" onclick="showDashboardNoteModal(${i})">
+                        <div class="sticky-note sticky-blue" style="cursor:pointer;" onclick="showDashboardNoteModal(${i})">
                             <div class="note-title">${note.title}</div>
                             <span class="note-category">${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</span>
                             <div class="note-preview">${truncateText(note.content, 100)}</div>
@@ -714,11 +720,10 @@
                     container.innerHTML = '<div class="no-data">No notes available</div>';
                     return;
                 }
-                const stickyColors = ['sticky-yellow', 'sticky-pink', 'sticky-blue', 'sticky-green', 'sticky-orange'];
+                // All sticky notes use only sticky-blue
                 container.innerHTML = notes.map((note, i) => {
-                    const color = stickyColors[i % stickyColors.length];
                     return `
-                        <div class="sticky-note ${color}" style="cursor:pointer;" onclick="showDashboardNoteModal(${i})">
+                        <div class="sticky-note sticky-blue" style="cursor:pointer;" onclick="showDashboardNoteModal(${i})">
                             <div class="note-title">${note.title}</div>
                             <span class="note-category">${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</span>
                             <div class="note-preview">${truncateText(note.content, 100)}</div>
@@ -734,6 +739,19 @@
                 container.innerHTML = `<div class="no-data">${error.message}</div>`;
             }
         }
+
+        // Sticky header on scroll
+        document.addEventListener('DOMContentLoaded', function() {
+            const header = document.querySelector('header');
+            const stickyClass = 'sticky-header';
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 0) {
+                    header.classList.add(stickyClass);
+                } else {
+                    header.classList.remove(stickyClass);
+                }
+            });
+        });
     </script>
 </body>
 </html>
