@@ -167,6 +167,25 @@
             background: #fff;
             transition: box-shadow 0.2s;
         }
+        .btn-danger {
+            background-color: #dc2626;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-danger:hover {
+            background-color: #b91c1c;
+        }
+        .btn-danger:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .btn-danger.active {
+            background-color: #dc2626;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
@@ -231,14 +250,12 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
                     </svg>
                     <span>Notifications</span>
-                    <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
                 </a>
                 <a href="notes.html" class="flex items-center space-x-3 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg transition-all duration-200 hover:bg-primary-100">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
                     </svg>
                     <span>Notes</span>
-                    <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
                 </a>
             </nav>
 
@@ -266,14 +283,22 @@
             <main class="p-8">
                 <!-- Controls -->
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                    <button onclick="showAddNoteModal()" class="btn-primary flex items-center space-x-2">
-                        <span>+</span>
-                        <span>Add New Note</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="showAddNoteModal()" class="btn-primary flex items-center space-x-2">
+                            <span>+</span>
+                            <span>Add New Note</span>
+                        </button>
+                        <button id="deleteNotesBtn" onclick="deleteSelectedNotes()" class="btn-danger flex items-center space-x-2 ml-2" disabled>
+                            <span>-</span>
+                            <span>Delete Notes</span>
+                        </button>
+                    </div>
                     <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
                         <div class="relative flex-1 md:w-64">
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span class="text-secondary-500">🔍</span>
+                                <svg class="w-4 h-4 text-secondary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
+                                </svg>
                             </div>
                             <input type="text" id="searchInput" placeholder="Search notes..." 
                                 class="input-field pl-10">
@@ -301,6 +326,7 @@
                     <table class="notes-table" id="notesTable">
                         <thead>
                             <tr>
+                                <th><input type="checkbox" id="selectAllNotes" onclick="toggleSelectAllNotes(this)"></th>
                                 <th>Title</th>
                                 <th>Category</th>
                                 <th>Priority</th>
@@ -424,11 +450,12 @@
         function displayNotesTable() {
             const tbody = document.getElementById('notesTableBody');
             if (!notes.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500">No notes found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">No notes found</td></tr>';
                 return;
             }
             tbody.innerHTML = notes.map((note, i) => `
-                <tr onclick="showNoteInfoModal(${i})">
+                <tr onclick="if(event.target.type!=='checkbox'){showNoteInfoModal(${i})}" style="cursor:pointer;">
+                    <td><input type="checkbox" class="note-checkbox" data-note-id="${note.note_id}" onclick="event.stopPropagation(); updateDeleteNotesBtnState()"></td>
                     <td>${note.title}</td>
                     <td>${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</td>
                     <td>${note.priority ? note.priority.charAt(0).toUpperCase() + note.priority.slice(1) : 'Low'}</td>
@@ -629,6 +656,49 @@
                 }
             });
         });
+
+        // Select all notes checkbox
+        function toggleSelectAllNotes(checkbox) {
+            const checkboxes = document.querySelectorAll('.note-checkbox');
+            checkboxes.forEach(cb => { cb.checked = checkbox.checked; });
+            updateDeleteNotesBtnState();
+        }
+        // Update delete button state
+        function updateDeleteNotesBtnState() {
+            const deleteBtn = document.getElementById('deleteNotesBtn');
+            const anyChecked = Array.from(document.querySelectorAll('.note-checkbox')).some(cb => cb.checked);
+            deleteBtn.disabled = !anyChecked;
+            if (anyChecked) {
+                deleteBtn.classList.add('active');
+            } else {
+                deleteBtn.classList.remove('active');
+            }
+        }
+        // Delete selected notes
+        async function deleteSelectedNotes() {
+            const checkedBoxes = Array.from(document.querySelectorAll('.note-checkbox:checked'));
+            if (!checkedBoxes.length) return;
+            if (!confirm(`Delete ${checkedBoxes.length} selected note(s)?`)) return;
+            let errorCount = 0;
+            for (const cb of checkedBoxes) {
+                const noteId = cb.getAttribute('data-note-id');
+                try {
+                    const response = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
+                    const data = await response.json();
+                    if (!data.success) errorCount++;
+                } catch {
+                    errorCount++;
+                }
+            }
+            if (errorCount === 0) {
+                showNotification('Selected notes deleted successfully!');
+            } else {
+                showNotification(`Some notes could not be deleted.`, 'error');
+            }
+            fetchNotes();
+            document.getElementById('selectAllNotes').checked = false;
+            updateDeleteNotesBtnState();
+        }
     </script>
 </body>
 </html> 
