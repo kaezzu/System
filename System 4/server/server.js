@@ -613,6 +613,7 @@ app.post('/api/auth/login', async (req, res) => {
             res.json({
                 success: true,
                 user: {
+                    id: user.id,
                     username: user.username,
                     role: user.role,
                     fullName: user.full_name
@@ -1391,4 +1392,14 @@ app.get('*', (req, res) => {
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
     console.log('Press Ctrl+C to stop');
+});
+
+app.get('/api/inventory', async (req, res) => {
+    try {
+        const items = await getAll('SELECT * FROM items ORDER BY product_id DESC');
+        res.setHeader('Content-Type', 'application/json');
+        res.json({ success: true, items });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });

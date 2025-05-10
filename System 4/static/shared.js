@@ -27,7 +27,7 @@ async function logActivity(action, details) {
 // Function to check for low stock
 async function checkLowStock() {
     try {
-        const response = await fetch(`${API_BASE_URL}/inventory`);
+        const response = await fetch(`${API_BASE_URL}/items/low-stock`);
         const items = await response.json();
         const lowStockThreshold = 20;
         return items.filter(item => parseInt(item.quantity) <= lowStockThreshold);
@@ -40,7 +40,7 @@ async function checkLowStock() {
 // Function to check for out of stock items
 async function checkOutOfStock() {
     try {
-        const response = await fetch(`${API_BASE_URL}/inventory`);
+        const response = await fetch(`${API_BASE_URL}/items/out-of-stock`);
         const items = await response.json();
         return items.filter(item => parseInt(item.quantity) <= 0);
     } catch (err) {

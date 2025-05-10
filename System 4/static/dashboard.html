@@ -7,6 +7,176 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="activity-logger.js"></script>
+    <style>
+        /* Sticky note styles for notes */
+        .sticky-note {
+            min-height: 140px;
+            background: #fffbe7;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px 0 rgba(0,0,0,0.08), 0 1.5px 4px 0 rgba(0,0,0,0.06);
+            padding: 1.25rem;
+            margin: 0.5rem 0;
+            position: relative;
+            transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s cubic-bezier(0.4,0,0.2,1);
+            font-family: 'Inter', Arial, sans-serif;
+            border: 1.5px solid #f7e9b0;
+        }
+        .sticky-note:hover {
+            transform: translateY(-8px) scale(1.03);
+            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.16), 0 3px 8px 0 rgba(0,0,0,0.10);
+            z-index: 2;
+        }
+        .sticky-yellow { background: #fffbe7; border-color: #f7e9b0; }
+        .sticky-pink { background: #ffe7f7; border-color: #f7b0e1; }
+        .sticky-blue { background: #e7f3ff; border-color: #b0d2f7; }
+        .sticky-green { background: #e7fff3; border-color: #b0f7d2; }
+        .sticky-orange { background: #fff4e7; border-color: #f7dcb0; }
+        .sticky-rotate-1 { transform: rotate(-2deg); }
+        .sticky-rotate-2 { transform: rotate(1.5deg); }
+        .sticky-rotate-3 { transform: rotate(-1deg); }
+        .sticky-rotate-4 { transform: rotate(2deg); }
+        .sticky-rotate-5 { transform: rotate(-1.5deg); }
+        .sticky-note .note-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+        .sticky-note .note-category {
+            display: inline-block;
+            font-size: 0.85rem;
+            background: #f7e9b0;
+            color: #b48a00;
+            border-radius: 6px;
+            padding: 0.1rem 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .sticky-note .note-footer {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        /* Center modal using flex */
+        #quickNoteModal {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        #quickNoteModal.flex-center {
+            display: flex !important;
+        }
+        /* Modal for dashboard sticky notes */
+        #dashboardNoteModal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            align-items: center;
+            justify-content: center;
+        }
+        #dashboardNoteModal.flex-center {
+            display: flex !important;
+        }
+        .modal-content {
+            background: #fff;
+            border-radius: 1rem;
+            padding: 0;
+            min-width: 420px;
+            max-width: 600px;
+            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.18);
+            animation: modalPop .25s cubic-bezier(0.4,0,0.2,1);
+            overflow: hidden;
+        }
+        @keyframes modalPop {
+            0% { transform: scale(0.95) translateY(30px); opacity: 0; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(90deg, #1976d2 0%, #7ec0ee 100%);
+            padding: 1.25rem 2rem 1.25rem 1.5rem;
+        }
+        .modal-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: white;
+            letter-spacing: 0.01em;
+        }
+        .modal-close {
+            font-size: 1.7rem;
+            color: #1976d2;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: color 0.15s;
+            border-radius: 9999px;
+            padding: 0.25rem 0.75rem;
+        }
+        .modal-close:hover {
+            background: rgba(25, 118, 210, 0.12);
+            color: #0d47a1;
+        }
+        .modal-body.sticky-style {
+            background: #fffbe7;
+            border-radius: 1rem;
+            box-shadow: 0 4px 16px 0 rgba(0,0,0,0.08), 0 1.5px 4px 0 rgba(0,0,0,0.06);
+            font-family: 'Inter', Arial, sans-serif;
+            border: 1.5px solid #f7e9b0;
+            min-width: 420px;
+            max-width: 600px;
+            font-size: 1.13rem;
+            padding: 2.5rem 2.5rem 2rem 2.5rem;
+        }
+        .modal-note-title {
+            font-weight: bold;
+            font-size: 1.25rem;
+            color: #222;
+            margin-bottom: 0.5rem;
+        }
+        .modal-note-category {
+            display: inline-block;
+            background: #f7e9b0;
+            color: #b48a00;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            padding: 0.18rem 0.9rem 0.18rem 0.9rem;
+            margin-bottom: 0.7rem;
+            font-weight: 600;
+        }
+        .modal-note-content {
+            color: #222;
+            font-size: 1.08rem;
+            font-weight: bold;
+            margin-bottom: 1.2rem;
+        }
+        .modal-note-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.98rem;
+            color: #b6a97c;
+            margin-top: 1.2rem;
+        }
+        .modal-note-author {
+            font-size: 0.98rem;
+            color: #b6a97c;
+        }
+        .modal-note-date {
+            font-size: 0.98rem;
+            color: #b6a97c;
+        }
+        @media (max-width: 600px) {
+            .modal-body.sticky-style {
+                min-width: 0;
+                padding: 1.2rem;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
     <script>
@@ -70,6 +240,13 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
                     </svg>
                     <span>Notifications</span>
+                    <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
+                </a>
+                <a href="notes.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
+                    </svg>
+                    <span>Notes</span>
                     <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
                 </a>
             </nav>
@@ -183,8 +360,38 @@
                         <option value="high">High Priority</option>
                     </select>
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Category</label>
+                    <select id="quickNoteCategory" class="input-field">
+                        <option value="general">General</option>
+                        <option value="meeting">Meeting Notes</option>
+                        <option value="task">Task Notes</option>
+                        <option value="idea">Ideas</option>
+                        <option value="inventory">Inventory</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
                 <button type="submit" class="w-full btn-primary">Save Note</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Dashboard sticky note modal HTML -->
+    <div id="dashboardNoteModal">
+        <div class="modal-content shadow-2xl rounded-2xl">
+            <div class="modal-header bg-gradient-to-r from-blue-700 to-blue-300">
+                <span class="modal-title" id="dashboardModalNoteTitle"></span>
+                
+                <button class="modal-close hover:bg-yellow-200" onclick="closeDashboardNoteModal()">&times;</button>
+            </div>
+            <div class="modal-body sticky-style">
+                <div class="modal-note-category" id="dashboardModalNoteCategory"></div>
+                <div class="modal-note-content" id="dashboardModalNoteContent"></div>
+                <div class="modal-note-footer">
+                    <span class="modal-note-author" id="dashboardModalNoteAuthor"></span>
+                    <span class="modal-note-date" id="dashboardModalNoteDate"></span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -267,7 +474,7 @@
                         <p class="text-sm text-gray-700">${activity.details}</p>
                         <div class="mt-2 text-xs text-gray-500">
                             By ${activity.full_name || activity.username || 'System'}
-                        </div>
+                        </div>  
                     </div>
                 `).join('');
             } catch (error) {
@@ -345,29 +552,39 @@
         }
 
         // Function to display recent notes
-        function displayRecentNotes() {
-            const notes = JSON.parse(localStorage.getItem('notes')) || [];
-            const recentNotes = notes.slice(0, 3); // Get 3 most recent notes
-            const container = document.getElementById('recentNotes');
-            
-            if (recentNotes.length === 0) {
-                container.innerHTML = '<div class="no-data">No notes available</div>';
-                return;
-            }
+        async function displayRecentNotes() {
+            try {
+                const response = await fetch('http://localhost:3000/api/notes');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to fetch notes');
+                const notes = data.notes.slice(0, 3); // Show 3 most recent notes
 
-            container.innerHTML = recentNotes.map(note => `
-                <div class="note-item ${getPriorityClass(note.priority)}">
-                    <div class="note-header">
-                        <h3>${note.title}</h3>
-                        <span class="note-priority">${formatPriority(note.priority)}</span>
-                    </div>
-                    <div class="note-preview">${truncateText(note.content, 100)}</div>
-                    <div class="note-footer">
-                        <span class="note-author">By ${note.authorFullName}</span>
-                        <span class="note-date">${formatTimestamp(note.createdAt)}</span>
-                    </div>
-                </div>
-            `).join('');
+                const container = document.getElementById('recentNotes');
+                if (notes.length === 0) {
+                    container.innerHTML = '<div class="no-data">No notes available</div>';
+                    return;
+                }
+
+                // Sticky note color/rotation classes
+                const stickyColors = ['sticky-yellow', 'sticky-pink', 'sticky-blue', 'sticky-green', 'sticky-orange'];
+                container.innerHTML = notes.map((note, i) => {
+                    const color = stickyColors[i % stickyColors.length];
+                    return `
+                        <div class="sticky-note ${color}" style="cursor:pointer;" onclick="showDashboardNoteModal(${i})">
+                            <div class="note-title">${note.title}</div>
+                            <span class="note-category">${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</span>
+                            <div class="note-preview">${truncateText(note.content, 100)}</div>
+                            <div class="note-footer">
+                                <span class="note-author">By ${note.author_name || note.username}</span>
+                                <span class="note-date">${new Date(note.created_at).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                const container = document.getElementById('recentNotes');
+                container.innerHTML = `<div class="no-data">${error.message}</div>`;
+            }
         }
 
         // Helper functions for notes
@@ -392,91 +609,57 @@
         // Quick Note Modal Functions
         function showQuickNoteModal() {
             const modal = document.getElementById('quickNoteModal');
-            modal.style.display = 'block';
+            modal.classList.add('flex-center');
             document.getElementById('quickNoteTitle').focus();
         }
 
         function closeQuickNoteModal() {
             const modal = document.getElementById('quickNoteModal');
-            modal.style.display = 'none';
+            modal.classList.remove('flex-center');
             document.getElementById('quickNoteForm').reset();
         }
 
         async function handleQuickNoteSubmit(event) {
             event.preventDefault();
-            
-            const titleField = document.getElementById('quickNoteTitle').parentElement.parentElement;
-            const contentField = document.getElementById('quickNoteContent').parentElement.parentElement;
+
             const submitButton = event.target.querySelector('button[type="submit"]');
-            
-            titleField.classList.remove('error');
-            contentField.classList.remove('error');
-            
-            const title = document.getElementById('quickNoteTitle').value.trim();
-            const content = document.getElementById('quickNoteContent').value.trim();
-            const priority = document.getElementById('quickNotePriority').value;
-            
-            let hasError = false;
-            
-            if (!title) {
-                titleField.classList.add('error');
-                hasError = true;
-            }
-            
-            if (!content) {
-                contentField.classList.add('error');
-                hasError = true;
-            }
-            
-            if (hasError) return;
-            
-            // Show loading state
             const originalButtonText = submitButton.innerHTML;
             submitButton.innerHTML = '<span>Saving...</span>';
             submitButton.disabled = true;
-            
+
             try {
                 const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-                
-                const note = {
-                    id: Date.now(),
-                    title: title,
-                    content: content,
-                    priority: priority,
-                    author: currentUser.username,
-                    authorFullName: currentUser.fullName,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                const noteData = {
+                    title: document.getElementById('quickNoteTitle').value.trim(),
+                    content: document.getElementById('quickNoteContent').value.trim(),
+                    priority: document.getElementById('quickNotePriority').value,
+                    category: document.getElementById('quickNoteCategory').value,
+                    user_id: currentUser && currentUser.id ? currentUser.id : null
                 };
-                
-                // Save note
-                const notes = JSON.parse(localStorage.getItem('notes')) || [];
-                notes.unshift(note);
-                localStorage.setItem('notes', JSON.stringify(notes));
-                
-                // Log the activity
-                await ActivityLogger.logNoteActivity(ActivityLogger.ACTIONS.NOTE.ADD, note);
-                
-                displayRecentNotes();
+                if (!noteData.user_id) {
+                    showNotification('User not found. Please log in again.', 'error');
+                    submitButton.innerHTML = originalButtonText;
+                    submitButton.disabled = false;
+                    return;
+                }
+
+                const response = await fetch('http://localhost:3000/api/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(noteData)
+                });
+
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to create note');
+
+                // Refresh recent notes
+                await displayRecentNotes();
+
                 closeQuickNoteModal();
-                
-                // Show success message
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded';
-                messageDiv.innerHTML = '✅ Note created successfully!';
-                document.body.appendChild(messageDiv);
-                setTimeout(() => messageDiv.remove(), 3000);
-                
+                showNotification('Note created successfully!');
             } catch (error) {
-                console.error('Error creating note:', error);
-                // Show error message
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded';
-                messageDiv.innerHTML = '❌ Error creating note. Please try again.';
-                document.body.appendChild(messageDiv);
-                setTimeout(() => messageDiv.remove(), 3000);
+                showNotification(error.message || 'Error creating note.', 'error');
             } finally {
-                // Reset button state
                 submitButton.innerHTML = originalButtonText;
                 submitButton.disabled = false;
             }
@@ -489,6 +672,68 @@
             displayRecentNotifications();
             displayRecentNotes();
         });
+
+        function showNotification(message, type = 'success') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `fixed top-4 right-4 z-50 ${type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700'} px-4 py-3 rounded border`;
+            messageDiv.innerHTML = `${type === 'success' ? '✅' : '❌'} ${message}`;
+            document.body.appendChild(messageDiv);
+            setTimeout(() => messageDiv.remove(), 3000);
+        }
+
+        console.log(sessionStorage.getItem('currentUser'));
+
+        // Show dashboard note modal
+        function showDashboardNoteModal(index) {
+            const note = window.dashboardNotesArray && window.dashboardNotesArray[index];
+            if (!note) return;
+            document.getElementById('dashboardModalNoteTitle').textContent = note.title;
+            document.getElementById('dashboardModalNoteCategory').textContent = note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General';
+            document.getElementById('dashboardModalNoteContent').textContent = note.content;
+            document.getElementById('dashboardModalNoteAuthor').textContent = `By ${note.author_name || note.username}`;
+            document.getElementById('dashboardModalNoteDate').textContent = new Date(note.created_at).toLocaleString();
+            document.getElementById('dashboardNoteModal').classList.add('flex-center');
+        }
+        function closeDashboardNoteModal() {
+            document.getElementById('dashboardNoteModal').classList.remove('flex-center');
+        }
+
+        // Store notes for modal access
+        window.dashboardNotesArray = [];
+        // Patch displayRecentNotes to store notes
+        const originalDisplayRecentNotes = displayRecentNotes;
+        displayRecentNotes = async function() {
+            try {
+                const response = await fetch('http://localhost:3000/api/notes');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to fetch notes');
+                const notes = data.notes.slice(0, 3); // Show 3 most recent notes
+                window.dashboardNotesArray = notes;
+                const container = document.getElementById('recentNotes');
+                if (notes.length === 0) {
+                    container.innerHTML = '<div class="no-data">No notes available</div>';
+                    return;
+                }
+                const stickyColors = ['sticky-yellow', 'sticky-pink', 'sticky-blue', 'sticky-green', 'sticky-orange'];
+                container.innerHTML = notes.map((note, i) => {
+                    const color = stickyColors[i % stickyColors.length];
+                    return `
+                        <div class="sticky-note ${color}" style="cursor:pointer;" onclick="showDashboardNoteModal(${i})">
+                            <div class="note-title">${note.title}</div>
+                            <span class="note-category">${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</span>
+                            <div class="note-preview">${truncateText(note.content, 100)}</div>
+                            <div class="note-footer">
+                                <span class="note-author">By ${note.author_name || note.username}</span>
+                                <span class="note-date">${new Date(note.created_at).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                const container = document.getElementById('recentNotes');
+                container.innerHTML = `<div class="no-data">${error.message}</div>`;
+            }
+        }
     </script>
 </body>
 </html>

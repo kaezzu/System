@@ -136,9 +136,13 @@ async function initializeDatabase() {
         db.run(`CREATE TABLE IF NOT EXISTS notes (
             note_id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
+            title TEXT NOT NULL,
             content TEXT NOT NULL,
-            priority TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(user_id)
+            priority TEXT DEFAULT 'low',
+            category TEXT DEFAULT 'general',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )`);
     });
 }

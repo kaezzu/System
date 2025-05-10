@@ -7,6 +7,159 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="activity-logger.js"></script>
+    <style>
+        /* Table styles */
+        .notes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+        }
+        .notes-table th, .notes-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+        }
+        .notes-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        .notes-table tr:hover {
+            background: #f3f4f6;
+            cursor: pointer;
+        }
+        /* Modal styles (for fallback if Tailwind is not loaded) */
+        #noteInfoModal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            align-items: center;
+            justify-content: center;
+        }
+        #noteInfoModal.flex-center {
+            display: flex !important;
+        }
+        .modal-content {
+            background: #fff;
+            border-radius: 1rem;
+            padding: 0;
+            min-width: 340px;
+            max-width: 95vw;
+            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.18);
+            animation: modalPop .25s cubic-bezier(0.4,0,0.2,1);
+            overflow: hidden;
+        }
+        @keyframes modalPop {
+            0% { transform: scale(0.95) translateY(30px); opacity: 0; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(90deg, #1976d2 0%, #7ec0ee 100%);
+            padding: 1.25rem 2rem 1.25rem 1.5rem;
+        }
+        .modal-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #fff;
+            letter-spacing: 0.01em;
+        }
+        .modal-close {
+            font-size: 1.7rem;
+            color: #fff;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: color 0.15s;
+            border-radius: 9999px;
+            padding: 0.25rem 0.75rem;
+        }
+        .modal-close:hover {
+            background: rgba(25, 118, 210, 0.12);
+            color: #0d47a1;
+        }
+        .modal-body {
+            padding: 2rem 2rem 1.5rem 2rem;
+            background: #fff;
+        }
+        .modal-label {
+            font-weight: 600;
+            color: #1976d2;
+            font-size: 0.97rem;
+        }
+        .modal-value {
+            margin-bottom: 0.7rem;
+            display: block;
+            color: #374151;
+            font-size: 1.05rem;
+        }
+        .modal-body .modal-value:last-child {
+            margin-bottom: 0;
+        }
+        .modal-body .modal-label {
+            margin-bottom: 0.1rem;
+        }
+        /* Sticky note modal body style */
+        .modal-body.sticky-style {
+            background: #fffbe7;
+            border-radius: 1rem;
+            box-shadow: 0 4px 16px 0 rgba(0,0,0,0.08), 0 1.5px 4px 0 rgba(0,0,0,0.06);
+            font-family: 'Inter', Arial, sans-serif;
+            border: 1.5px solid #f7e9b0;
+            min-width: 420px;
+            max-width: 600px;
+            font-size: 1.13rem;
+            padding: 2.5rem 2.5rem 2rem 2.5rem;
+        }
+        .modal-note-title {
+            font-weight: bold;
+            font-size: 1.25rem;
+            color: #222;
+            margin-bottom: 0.5rem;
+        }
+        .modal-note-category {
+            display: inline-block;
+            background: #f7e9b0;
+            color: #b48a00;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            padding: 0.18rem 0.9rem 0.18rem 0.9rem;
+            margin-bottom: 0.7rem;
+            font-weight: 600;
+        }
+        .modal-note-content {
+            color: #222;
+            font-size: 1.08rem;
+            font-weight: bold;
+            margin-bottom: 1.2rem;
+        }
+        .modal-note-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.98rem;
+            color: #b6a97c;
+            margin-top: 1.2rem;
+        }
+        .modal-note-author {
+            font-size: 0.98rem;
+            color: #b6a97c;
+        }
+        .modal-note-date {
+            font-size: 0.98rem;
+            color: #b6a97c;
+        }
+        @media (max-width: 600px) {
+            .modal-body.sticky-style {
+                min-width: 0;
+                padding: 1.2rem;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
     <script>
@@ -72,6 +225,13 @@
                     <span>Notifications</span>
                     <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
                 </a>
+                <a href="notes.html" class="flex items-center space-x-3 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg transition-all duration-200 hover:bg-primary-100">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
+                    </svg>
+                    <span>Notes</span>
+                    <span class="ml-auto bg-red-500 text-white text-xs px-2 py-1 rounded-full">3</span>
+                </a>
             </nav>
 
             <div class="absolute bottom-0 w-64 p-4 border-t border-secondary-200">
@@ -129,8 +289,40 @@
                 </div>
 
                 <!-- Notes Grid -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="notesContainer">
-                    <!-- Notes will be dynamically populated here -->
+                <div>
+                    <table class="notes-table" id="notesTable">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Category</th>
+                                <th>Priority</th>
+                                <th>Author</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="notesTableBody">
+                            <!-- Notes will be dynamically populated here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Note Info Modal -->
+                <div id="noteInfoModal">
+                    <div class="modal-content shadow-2xl rounded-2xl">
+                        <div class="modal-header bg-gradient-to-r from-yellow-400 to-pink-400">
+                            <span class="modal-title" id="modalNoteTitle">Note Details</span>
+                            <button class="modal-close hover:bg-yellow-200" onclick="closeNoteInfoModal()">&times;</button>
+                        </div>
+                        <div class="modal-body sticky-style">
+                            <div class="modal-note-title" id="modalNoteTitle">Note Details</div>
+                            <div class="modal-note-category" id="modalNoteCategory"></div>
+                            <div class="modal-note-content" id="modalNoteContent"></div>
+                            <div class="modal-note-footer">
+                                <span class="modal-note-author" id="modalNoteAuthor"></span>
+                                <span class="modal-note-date" id="modalNoteDate"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -196,7 +388,6 @@
 
     <script src="shared.js"></script>
     <script>
-        const API_BASE_URL = 'http://localhost:3000';
         let notes = [];
 
         // Function to show notification
@@ -208,57 +399,50 @@
             setTimeout(() => messageDiv.remove(), 3000);
         }
 
-        // Function to fetch and display notes
+        // Fetch notes and display in table
         async function fetchNotes() {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/notes`);
+                const response = await fetch('/api/notes');
                 const data = await response.json();
-                
-                if (!data.success) {
-                    throw new Error(data.error || 'Failed to fetch notes');
-                }
-
+                if (!data.success) throw new Error(data.error || 'Failed to fetch notes');
                 notes = data.notes;
-                displayNotes();
+                displayNotesTable();
             } catch (error) {
-                console.error('Error fetching notes:', error);
-                showNotification(error.message, 'error');
+                document.getElementById('notesTableBody').innerHTML = `<tr><td colspan="5" class="text-center text-red-500">${error.message}</td></tr>`;
             }
         }
 
-        // Function to display notes
-        function displayNotes() {
-            const container = document.getElementById('notesContainer');
-            
-            if (notes.length === 0) {
-                container.innerHTML = '<div class="col-span-full text-center text-gray-500">No notes found</div>';
+        // Display notes in table
+        function displayNotesTable() {
+            const tbody = document.getElementById('notesTableBody');
+            if (!notes.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500">No notes found</td></tr>';
                 return;
             }
-
-            container.innerHTML = notes.map(note => `
-                <div class="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-lg font-semibold text-secondary-900">${note.title}</h3>
-                        <span class="px-2 py-1 text-sm rounded ${getPriorityClass(note.priority)}">${note.priority}</span>
-                    </div>
-                    <p class="text-secondary-600 mb-4">${note.content}</p>
-                    <div class="flex items-center justify-between text-sm text-secondary-500">
-                        <span>By ${note.author_name || note.username}</span>
-                        <div class="flex items-center space-x-2">
-                            <button onclick="editNote(${note.note_id})" class="text-blue-600 hover:text-blue-700">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                                </svg>
-                            </button>
-                            <button onclick="deleteNote(${note.note_id})" class="text-red-600 hover:text-red-700">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            tbody.innerHTML = notes.map((note, i) => `
+                <tr onclick="showNoteInfoModal(${i})">
+                    <td>${note.title}</td>
+                    <td>${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</td>
+                    <td>${note.priority ? note.priority.charAt(0).toUpperCase() + note.priority.slice(1) : 'Low'}</td>
+                    <td>${note.author_name || note.username}</td>
+                    <td>${new Date(note.created_at).toLocaleString()}</td>
+                </tr>
             `).join('');
+        }
+
+        // Show note info modal
+        function showNoteInfoModal(index) {
+            const note = notes[index];
+            document.getElementById('modalNoteTitle').textContent = note.title;
+            document.getElementById('modalNoteCategory').textContent = note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General';
+            document.getElementById('modalNoteContent').textContent = note.content;
+            document.getElementById('modalNoteAuthor').textContent = `By ${note.author_name || note.username}`;
+            document.getElementById('modalNoteDate').textContent = new Date(note.created_at).toLocaleString();
+            document.getElementById('noteInfoModal').classList.add('flex-center');
+        }
+
+        function closeNoteInfoModal() {
+            document.getElementById('noteInfoModal').classList.remove('flex-center');
         }
 
         // Function to handle note submission
@@ -285,8 +469,8 @@
                 };
 
                 const url = noteId ? 
-                    `${API_BASE_URL}/api/notes/${noteId}` : 
-                    `${API_BASE_URL}/api/notes`;
+                    `/api/notes/${noteId}` : 
+                    `/api/notes`;
                 
                 const response = await fetch(url, {
                     method: noteId ? 'PUT' : 'POST',
@@ -320,7 +504,7 @@
             if (!confirm('Are you sure you want to delete this note?')) return;
             
             try {
-                const response = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
+                const response = await fetch(`/api/notes/${noteId}`, {
                     method: 'DELETE'
                 });
 
