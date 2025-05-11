@@ -18,27 +18,10 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '..', 'static')));
 
-// Debug middleware to log requests
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    console.log('Request body:', req.body);
-    next();
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err);
     res.status(500).json({ error: err.message });
-});
-
-// Debug: Log the static files directory
-const staticDir = path.join(__dirname, '..');
-console.log('Static files directory:', staticDir);
-
-// Debug: Log all requests
-app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url}`);
-    next();
 });
 
 // Health check endpoint
@@ -56,12 +39,10 @@ function getDefaultDueDate() {
 // Borrowed Items endpoints
 app.get('/api/borrowed-items', async (req, res) => {
     try {
-        console.log('Fetching borrowed items...'); // Debug log
         const borrowedItems = await getAll('SELECT * FROM borrowed_items ORDER BY borrow_date DESC');
-        console.log('Borrowed items:', borrowedItems); // Debug log
         res.json(borrowedItems);
     } catch (err) {
-        console.error('Error fetching borrowed items:', err); // Debug log
+        console.error('Error fetching borrowed items:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -221,6 +202,19 @@ app.post('/api/categories', async (req, res) => {
     try {
         const { name } = req.body;
         
+        // First check if category already exists
+        const existingCategory = await getOne('SELECT * FROM categories WHERE name = ?', [name]);
+        
+        if (existingCategory) {
+            // If category exists, return it instead of creating a new one
+            return res.json({ 
+                id: existingCategory.id, 
+                name: existingCategory.name,
+                alreadyExists: true 
+            });
+        }
+        
+        // If not, create a new category
         const result = await runQuery(
             'INSERT INTO categories (name) VALUES (?)',
             [name]
@@ -228,13 +222,14 @@ app.post('/api/categories', async (req, res) => {
         
         // Log activity
         await runQuery(
-            `INSERT INTO user_activities (timestamp, username, action, details) 
-             VALUES (?, ?, ?, ?)`,
-            [new Date().toISOString(), req.body.username || 'system', 'add_category', `Added category: ${name}`]
+            `INSERT INTO activity_log (timestamp, action, details) 
+             VALUES (datetime('now'), ?, ?)`,
+            ['add_category', `Added category: ${name}`]
         );
         
         res.json({ id: result.lastID, name });
     } catch (err) {
+        console.error('Error handling category:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -285,7 +280,7 @@ app.get('/api/items', async (req, res) => {
 });
 
 app.post('/api/items', async (req, res) => {
-    const { name, category, status, availability, quantity } = req.body;
+    const { name, category, status, availability, quantity, expiration_date } = req.body;
 
     // Validate required fields
     if (!name) {
@@ -303,18 +298,18 @@ app.post('/api/items', async (req, res) => {
             // Generate custom ID
             const productId = await generateItemId();
 
-            // Insert item with custom ID (now including quantity)
+            // Insert item with custom ID (now including quantity and expiration date)
             await runQuery(
-                `INSERT INTO items (product_id, name, category, status, availability, quantity) 
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [productId, name, category || null, status || null, availability || null, parseInt(quantity) || 0]
+                `INSERT INTO items (product_id, name, category, status, availability, quantity, expiration_date) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [productId, name, category || null, status || null, availability || null, parseInt(quantity) || 0, expiration_date || null]
             );
 
             // Log activity
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (datetime('now'), ?, ?)`,
-                ['add_item', `Added new item: ${name} with quantity: ${quantity || 0}`]
+                ['add_item', `Added new item: ${name} with quantity: ${quantity || 0}${expiration_date ? ', expiration: ' + expiration_date : ''}`]
             );
 
             await runQuery('COMMIT');
@@ -357,7 +352,7 @@ app.get('/api/items/:id', async (req, res) => {
 
 app.put('/api/items/:id', async (req, res) => {
     const itemId = req.params.id;
-    const { name, category, status, availability, quantity } = req.body;
+    const { name, category, status, availability, quantity, expiration_date } = req.body;
 
     if (!name) {
         return res.status(400).json({ 
@@ -372,15 +367,15 @@ app.put('/api/items/:id', async (req, res) => {
         try {
             await runQuery(
                 `UPDATE items 
-                 SET name = ?, category = ?, status = ?, availability = ?, quantity = ?
+                 SET name = ?, category = ?, status = ?, availability = ?, quantity = ?, expiration_date = ?
                  WHERE product_id = ?`,
-                [name, category || null, status || null, availability || null, parseInt(quantity) || 0, itemId]
+                [name, category || null, status || null, availability || null, parseInt(quantity) || 0, expiration_date || null, itemId]
             );
 
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (datetime('now'), ?, ?)`,
-                ['update_item', `Updated item: ${name} with quantity: ${quantity || 0}`]
+                ['update_item', `Updated item: ${name} with quantity: ${quantity || 0}${expiration_date ? ', expiration: ' + expiration_date : ''}`]
             );
 
             await runQuery('COMMIT');
@@ -528,10 +523,8 @@ async function initializeActivityLogTable() {
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         `);
-        console.log('Activity log table initialized successfully');
     } catch (err) {
         console.error('Error initializing activity log table:', err);
-        throw err;
     }
 }
 
@@ -552,17 +545,14 @@ async function initializeNotesTable() {
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         `);
-        console.log('Notes table initialized successfully');
     } catch (err) {
         console.error('Error initializing notes table:', err);
-        throw err;
     }
 }
 
 // Initialize borrowed_items table
 async function initializeBorrowedItemsTable() {
     try {
-        console.log('Initializing borrowed_items table...'); // Debug log
         await runQuery(`
             CREATE TABLE IF NOT EXISTS borrowed_items (
                 id TEXT PRIMARY KEY,
@@ -580,10 +570,8 @@ async function initializeBorrowedItemsTable() {
                 FOREIGN KEY (item_id) REFERENCES items(product_id)
             )
         `);
-        console.log('Borrowed items table initialized successfully');
     } catch (err) {
         console.error('Error initializing borrowed items table:', err);
-        throw err;
     }
 }
 
@@ -594,7 +582,7 @@ async function initializeTables() {
         await initializeActivityLogTable();
         await initializeBorrowedItemsTable();
         await initializeDefaultUsers();
-        console.log('All tables initialized successfully');
+        console.log('Database tables initialized');
     } catch (err) {
         console.error('Error during table initialization:', err);
     }
@@ -870,7 +858,6 @@ async function initializeDefaultUsers() {
                 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
                 ['admin', 'admin', 'department_head']
             );
-            console.log('Created admin user');
         }
         
         // Add member if not exists
@@ -880,10 +867,9 @@ async function initializeDefaultUsers() {
                 'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
                 ['member', 'member', 'member']
             );
-            console.log('Created member user');
         }
 
-        // Log all users
+        // Remove log all users
     } catch (err) {
         console.error('Error initializing default users:', err);
     }
@@ -895,7 +881,6 @@ initializeDefaultUsers();
 // Serve index.html for the root route
 app.get('/', (req, res) => {
     const indexPath = path.join(__dirname, '..', 'index.html');
-    console.log('Serving index.html from:', indexPath);
     res.sendFile(indexPath);
 });
 
@@ -939,6 +924,25 @@ app.get('/api/suppliers', async (req, res) => {
         res.json({ success: true, suppliers });
     } catch (err) {
         console.error('Error fetching suppliers:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/suppliers/:id', async (req, res) => {
+    const supplierId = req.params.id;
+    try {
+        const supplier = await getOne('SELECT * FROM suppliers WHERE supplier_id = ?', [supplierId]);
+        
+        if (!supplier) {
+            return res.status(404).json({ success: false, error: 'Supplier not found' });
+        }
+
+        res.json({
+            success: true,
+            supplier
+        });
+    } catch (err) {
+        console.error('Error fetching supplier:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -1144,7 +1148,6 @@ app.get('/inventory', async (req, res) => {
     try {
         // Get items from database
         const items = await getAll('SELECT * FROM items ORDER BY name');
-        console.log('Fetched items:', items); // Debug log
 
         // Read the HTML template
         let html = await require('fs').promises.readFile(
@@ -1188,11 +1191,9 @@ app.get('/inventory', async (req, res) => {
 // Handle inventory form submission
 app.post('/inventory/add', async (req, res) => {
     try {
-        console.log('Adding item:', req.body);
-        const { name, category, status, availability, quantity } = req.body;
+        const { name, category, status, availability, quantity, expiration_date } = req.body;
         
         if (!name || name.trim() === '') {
-            console.log('Item name is missing');
             return res.status(400).send('Item name is required');
         }
 
@@ -1201,16 +1202,16 @@ app.post('/inventory/add', async (req, res) => {
         try {
             // Insert the item
             const result = await runQuery(
-                `INSERT INTO items (name, category, status, availability, quantity) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [name.trim(), category?.trim(), status?.trim(), availability?.trim(), parseInt(quantity) || 0]
+                `INSERT INTO items (name, category, status, availability, quantity, expiration_date) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [name.trim(), category?.trim(), status?.trim(), availability?.trim(), parseInt(quantity) || 0, expiration_date || null]
             );
 
             // Log the activity
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (?, ?, ?)`,
-                [new Date().toISOString(), 'add_item', `Added item: ${name} with quantity: ${quantity || 0}`]
+                [new Date().toISOString(), 'add_item', `Added item: ${name} with quantity: ${quantity || 0}${expiration_date ? ', expiration: ' + expiration_date : ''}`]
             );
 
             await runQuery('COMMIT');
@@ -1268,7 +1269,7 @@ app.post('/inventory/delete/:id', async (req, res) => {
 // Handle inventory update
 app.post('/inventory/update/:id', async (req, res) => {
     try {
-        const { name, category, status, availability, quantity } = req.body;
+        const { name, category, status, availability, quantity, expiration_date } = req.body;
         const itemId = req.params.id;
 
         if (!name) {
@@ -1281,16 +1282,16 @@ app.post('/inventory/update/:id', async (req, res) => {
             // Update the item
             await runQuery(
                 `UPDATE items 
-                 SET name = ?, category = ?, status = ?, availability = ?, quantity = ?
+                 SET name = ?, category = ?, status = ?, availability = ?, quantity = ?, expiration_date = ?
                  WHERE product_id = ?`,
-                [name, category, status, availability, parseInt(quantity) || 0, itemId]
+                [name, category, status, availability, parseInt(quantity) || 0, expiration_date || null, itemId]
             );
 
             // Log the activity
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (?, ?, ?)`,
-                [new Date().toISOString(), 'update_item', `Updated item: ${name} with quantity: ${quantity || 0}`]
+                [new Date().toISOString(), 'update_item', `Updated item: ${name} with quantity: ${quantity || 0}${expiration_date ? ', expiration: ' + expiration_date : ''}`]
             );
 
             await runQuery('COMMIT');
@@ -1310,16 +1311,13 @@ app.get('/debug/suppliers', async (req, res) => {
     try {
         // Get table info
         const tableInfo = await getAll("SELECT sql FROM sqlite_master WHERE type='table' AND name='suppliers'");
-        console.log('Suppliers table schema:', tableInfo);
-
+        
         // Get suppliers count
         const count = await getOne('SELECT COUNT(*) as count FROM suppliers');
-        console.log('Suppliers count:', count);
-
+        
         // Get all suppliers
         const suppliers = await getAll('SELECT * FROM suppliers');
-        console.log('All suppliers:', suppliers);
-
+        
         res.json({
             schema: tableInfo,
             count: count,
@@ -1336,16 +1334,13 @@ app.get('/debug/items', async (req, res) => {
     try {
         // Get table info
         const tableInfo = await getAll("SELECT sql FROM sqlite_master WHERE type='table' AND name='items'");
-        console.log('Items table schema:', tableInfo);
-
+        
         // Get items count
         const count = await getOne('SELECT COUNT(*) as count FROM items');
-        console.log('Items count:', count);
-
+        
         // Get all items
         const items = await getAll('SELECT * FROM items');
-        console.log('All items:', items);
-
+        
         res.json({
             schema: tableInfo,
             count: count,
@@ -1574,7 +1569,6 @@ app.get('/api/recent-activities', async (req, res) => {
 // Move catch-all route to the end
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, '..', 'index.html');
-    console.log('Serving index.html for route:', req.url);
     res.sendFile(indexPath);
 });
 

@@ -59,17 +59,59 @@
 
             // Define global functions
             window.showAddItemModal = function() {
-                document.getElementById('addItemModal').classList.remove('hidden');
-                document.getElementById('addItemModal').classList.add('flex');
+                // Check if user has permission to add items
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                if (currentUser && currentUser.role === 'member') {
+                    showToast('You do not have permission to add new items', 'error');
+                    return;
+                }
+                
+                const modal = document.getElementById('addItemModal');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
                 document.getElementById('addItemForm').reset();
             };
 
             window.closeModal = function() {
                 document.getElementById('addItemModal').classList.add('hidden');
                 document.getElementById('addItemModal').classList.remove('flex');
+                
+                // Reset form state
+                const form = document.getElementById('addItemForm');
+                form.reset();
+                form.removeAttribute('data-item-id');
+                
+                // Reset modal title
+                const modalTitle = document.querySelector('#addItemModal h2');
+                if (modalTitle) {
+                    modalTitle.textContent = 'Add New Item';
+                }
+                
+                // Reset placeholders and dropdown text
+                document.getElementById('itemName').placeholder = '';
+                document.getElementById('itemQuantity').placeholder = '';
+                document.getElementById('itemExpirationDate').value = ''; // Clear expiration date
+                
+                // Reset dropdown texts
+                document.querySelector('#itemCategory option[value=""]').textContent = 'Select Category';
+                document.querySelector('#itemStatus option[value=""]').textContent = 'Select Status';
+                document.querySelector('#itemAvailability option[value=""]').textContent = 'Select Availability';
+                
+                // Reset submit button text
+                const submitButton = document.querySelector('#addItemForm button[type="submit"]');
+                if (submitButton) {
+                    submitButton.textContent = 'Save Item';
+                }
             };
 
             window.editItem = async function(id) {
+                // Check if user has permission to edit items
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                if (currentUser && currentUser.role === 'member') {
+                    showToast('You do not have permission to edit items', 'error');
+                    return;
+                }
+                
                 try {
                     const response = await fetch(`${API_BASE_URL}/api/items/${id}`);
                     if (!response.ok) throw new Error('Failed to fetch item');
@@ -80,13 +122,84 @@
                     }
 
                     const item = data.item;
-                    document.getElementById('itemName').value = item.name;
-                    document.getElementById('itemCategory').value = item.category || '';
-                    document.getElementById('itemStatus').value = item.status;
-                    document.getElementById('itemAvailability').value = item.availability;
+                    
+                    // Update modal title to indicate we're editing
+                    const modalTitle = document.querySelector('#addItemModal h2');
+                    if (modalTitle) {
+                        modalTitle.textContent = `Edit Item: ${item.name}`;
+                    }
+                    
+                    // Set values for all form fields
+                    document.getElementById('itemName').value = item.name || '';
+                    document.getElementById('itemName').placeholder = `Current: ${item.name || 'None'}`;
+                    
+                    // Handle category dropdown
+                    const categoryDropdown = document.getElementById('itemCategory');
+                    let categoryFound = false;
+                    
+                    // First check if the category exists in the dropdown
+                    for (let i = 0; i < categoryDropdown.options.length; i++) {
+                        if (categoryDropdown.options[i].value === item.category) {
+                            categoryDropdown.selectedIndex = i;
+                            categoryFound = true;
+                            break;
+                        }
+                    }
+                    
+                    // If category not found, add it to the dropdown
+                    if (!categoryFound && item.category) {
+                        // Create new option and insert before the "Add New" option
+                        const newOption = document.createElement('option');
+                        newOption.value = item.category;
+                        newOption.textContent = item.category;
+                        
+                        // Insert before the last option (which is "Add New")
+                        const addNewOption = categoryDropdown.querySelector('option[value="add_new_category"]');
+                        categoryDropdown.insertBefore(newOption, addNewOption);
+                        
+                        // Select the new category
+                        newOption.selected = true;
+                    } else if (!categoryFound) {
+                        // If no category, select the default blank option
+                        categoryDropdown.selectedIndex = 0;
+                    }
+                    
+                    // Update the empty option text
+                    const emptyOption = categoryDropdown.querySelector('option[value=""]');
+                    if (emptyOption) {
+                        emptyOption.textContent = item.category ? `Current: ${item.category}` : 'Select Category';
+                    }
+                    
+                    document.getElementById('itemStatus').value = item.status || '';
+                    // Set a note for the status dropdown
+                    const statusOption = Array.from(document.getElementById('itemStatus').options)
+                        .find(option => option.value === '');
+                    if (statusOption) {
+                        statusOption.textContent = `Current: ${item.status || 'None'}`;
+                    }
+                    
+                    document.getElementById('itemAvailability').value = item.availability || '';
+                    // Set a note for the availability dropdown
+                    const availabilityOption = Array.from(document.getElementById('itemAvailability').options)
+                        .find(option => option.value === '');
+                    if (availabilityOption) {
+                        availabilityOption.textContent = `Current: ${item.availability || 'None'}`;
+                    }
+                    
+                    document.getElementById('itemQuantity').value = item.quantity || 0;
+                    document.getElementById('itemQuantity').placeholder = `Current: ${item.quantity || 0}`;
+                    
+                    document.getElementById('itemExpirationDate').value = item.expiration_date || '';
+                    document.getElementById('itemExpirationDate').placeholder = `Current: ${item.expiration_date || 'None'}`;
                     
                     // Store the item ID for update
                     document.getElementById('addItemForm').setAttribute('data-item-id', item.product_id);
+                    
+                    // Change the submit button text
+                    const submitButton = document.querySelector('#addItemForm button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.textContent = 'Update Item';
+                    }
                     
                     showAddItemModal();
                 } catch (error) {
@@ -96,6 +209,19 @@
             };
 
             window.deleteItem = async function(id) {
+                // Check if user has permission to delete items
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                if (currentUser && currentUser.role === 'member') {
+                    showToast('You do not have permission to delete items', 'error');
+                    return;
+                }
+                
+                // Additional check for logistic officers
+                if (currentUser && currentUser.role === 'logistic_officer') {
+                    showToast('Logistic Officers cannot delete items', 'error');
+                    return;
+                }
+                
                 if (!confirm('Are you sure you want to delete this item?')) return;
                 
                 try {
@@ -235,6 +361,89 @@
                 }
             };
 
+            window.showAddCategoryModal = function() {
+                const modal = document.getElementById('categoryModal');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                document.getElementById('newCategoryName').focus();
+            };
+
+            window.closeCategoryModal = function() {
+                document.getElementById('categoryModal').classList.add('hidden');
+                document.getElementById('categoryModal').classList.remove('flex');
+                document.getElementById('categoryForm').reset();
+                
+                // Reset the category dropdown to first option
+                const categoryDropdown = document.getElementById('itemCategory');
+                if (categoryDropdown) {
+                    categoryDropdown.selectedIndex = 0;
+                }
+            };
+
+            async function handleAddCategory(event) {
+                event.preventDefault();
+                
+                const categoryName = document.getElementById('newCategoryName').value.trim();
+                if (!categoryName) {
+                    showNotification('Please enter a category name', 'error');
+                    return;
+                }
+                
+                try {
+                    // Save category to database
+                    const response = await fetch(`${API_BASE_URL}/api/categories`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: categoryName })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to add category');
+                    }
+                    
+                    const data = await response.json();
+                    if (!data.id) {
+                        throw new Error('Failed to add category');
+                    }
+                    
+                    // Add the new category to the dropdown
+                    const categoryDropdown = document.getElementById('itemCategory');
+                    if (categoryDropdown) {
+                        // Check if this category option already exists
+                        const existingOption = Array.from(categoryDropdown.options).find(option => 
+                            option.value === categoryName || option.textContent === categoryName
+                        );
+                        
+                        if (!existingOption) {
+                            // Create new option and insert before the "Add New" option
+                            const newOption = document.createElement('option');
+                            newOption.value = categoryName;
+                            newOption.textContent = categoryName;
+                            
+                            // Insert before the last option (which is "Add New")
+                            const addNewOption = categoryDropdown.querySelector('option[value="add_new_category"]');
+                            categoryDropdown.insertBefore(newOption, addNewOption);
+                        }
+                        
+                        // Select the category option
+                        Array.from(categoryDropdown.options).forEach(option => {
+                            if (option.value === categoryName || option.textContent === categoryName) {
+                                option.selected = true;
+                            }
+                        });
+                    }
+                    
+                    showNotification(`Category "${categoryName}" ${data.alreadyExists ? 'selected' : 'added successfully'}`);
+                    closeCategoryModal();
+                } catch (error) {
+                    console.error('Error adding category:', error);
+                    showNotification(`Error adding category: ${error.message}`, 'error');
+                }
+            }
+
             // Internal functions
             async function loadItems() {
                 try {
@@ -254,8 +463,15 @@
                     }
                     tableBody.innerHTML = '';
                     
+                    // Get current user role
+                    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                    const isMember = currentUser && currentUser.role === 'member';
+                    const isLogisticOfficer = currentUser && currentUser.role === 'logistic_officer';
+                    
                     items.forEach(item => {
                         const row = document.createElement('tr');
+                        
+                        // Create base row content
                         row.innerHTML = `
                             <td class="px-6 py-4 text-center">${item.product_id}</td>
                             <td class="px-6 py-4 text-center">${item.name}</td>
@@ -263,35 +479,68 @@
                             <td class="px-6 py-4 text-center">${item.status}</td>
                             <td class="px-6 py-4 text-center">${item.availability}</td>
                             <td class="px-6 py-4 text-center">${item.quantity || 0}</td>
-                            <td class="px-6 py-4 text-center">
+                            <td class="px-6 py-4 text-center">${item.expiration_date || '-'}</td>
+                        `;
+                        
+                        // Add action buttons cell - only if not a member
+                        const actionsCell = document.createElement('td');
+                        actionsCell.className = "px-6 py-4 text-center";
+                        
+                        if (!isMember) {
+                            // Create different action buttons based on user role
+                            let actionsHtml = `
                                 <div class="flex items-center justify-center space-x-3">
                                     <button onclick="editItem(${item.product_id})"
-                                        class="inline-flex items-center justify-center px-2 py-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
+                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
                                         title="Edit Item"
                                         aria-label="Edit Item">
                                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
                                         </svg>
-                                    </button>
+                                    </button>`;
+                                    
+                            // Only show delete button if user is NOT a logistic officer
+                            if (!isLogisticOfficer) {
+                                actionsHtml += `
                                     <button onclick="deleteItem(${item.product_id})"
-                                        class="inline-flex items-center justify-center px-2 py-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors duration-150"
+                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-red-600 text-red-600 hover:bg-red-50 rounded-md transition-colors duration-150"
                                         title="Delete Item"
                                         aria-label="Delete Item">
                                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                         </svg>
-                                    </button>
-                                    <button onclick="showQuantityModal(${item.product_id}, '${item.name}', ${item.quantity || 0})"
-                                        class="inline-flex items-center justify-center px-2 py-1.5 text-green-600 hover:bg-green-50 rounded-md transition-colors duration-150"
-                                        title="Manage Quantity"
-                                        aria-label="Manage Quantity">
+                                    </button>`;
+                            } else {
+                                // For logistic officers, show a disabled delete button or informational text
+                                actionsHtml += `
+                                    <button disabled
+                                        class="inline-flex items-center justify-center px-2 py-1.5 text-gray-400 cursor-not-allowed rounded-md"
+                                        title="Delete not allowed for Logistic Officers"
+                                        aria-label="Delete not allowed">
                                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                         </svg>
-                                    </button>
-                                </div>
-                            </td>
-                        `;
+                                    </button>`;
+                            }
+                                    
+                            actionsHtml += `
+                                <button onclick="showQuantityModal(${item.product_id}, '${item.name}', ${item.quantity || 0})"
+                                    class="inline-flex items-center justify-center px-2 py-1.5 border border-green-600 text-green-600 hover:bg-green-50 rounded-md transition-colors duration-150"
+                                    title="Manage Quantity"
+                                    aria-label="Manage Quantity">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                    </svg>
+                                </button>
+                            </div>`;
+                            
+                            actionsCell.innerHTML = actionsHtml;
+                        } else {
+                            // For members, just display "No actions available"
+                            actionsCell.innerHTML = `<span class="text-gray-400 text-sm">No actions available</span>`;
+                        }
+                        
+                        row.appendChild(actionsCell);
                         tableBody.appendChild(row);
                     });
                 } catch (error) {
@@ -307,10 +556,46 @@
                     const categories = await response.json();
                     
                     const categorySelect = document.getElementById('itemCategory');
+                    
+                    // Save the "Add New" option if it exists
+                    const addNewOption = categorySelect.querySelector('option[value="add_new_category"]');
+                    
+                    // Clear and add the default option
                     categorySelect.innerHTML = '<option value="">Select Category</option>';
+                    
+                    // Add database categories
                     categories.forEach(category => {
-                        categorySelect.innerHTML += `<option value="${category.id}">${category.name}</option>`;
+                        const option = document.createElement('option');
+                        option.value = category.name; // Use name instead of id for consistency
+                        option.textContent = category.name;
+                        categorySelect.appendChild(option);
                     });
+                    
+                    // Add default categories if they don't exist yet
+                    const defaultCategories = ['Medical Supplies', 'Communication', 'PPE', 'Specialized Equipment'];
+                    defaultCategories.forEach(cat => {
+                        // Check if this category already exists
+                        const exists = Array.from(categorySelect.options).some(option => 
+                            option.value === cat || option.textContent === cat
+                        );
+                        
+                        if (!exists) {
+                            const option = document.createElement('option');
+                            option.value = cat;
+                            option.textContent = cat;
+                            categorySelect.appendChild(option);
+                        }
+                    });
+                    
+                    // Re-add the "Add New" option
+                    if (addNewOption) {
+                        categorySelect.appendChild(addNewOption);
+                    } else {
+                        const newOption = document.createElement('option');
+                        newOption.value = 'add_new_category';
+                        newOption.textContent = '+ Add New Category';
+                        categorySelect.appendChild(newOption);
+                    }
                 } catch (error) {
                     console.error('Error loading categories:', error);
                     showNotification('Error loading categories', 'error');
@@ -326,7 +611,8 @@
                     category: formData.get('category'),
                     status: formData.get('status'),
                     availability: formData.get('availability'),
-                    quantity: formData.get('quantity')
+                    quantity: formData.get('quantity'),
+                    expiration_date: formData.get('expiration_date')
                 };
 
                 const itemId = event.target.getAttribute('data-item-id');
@@ -358,12 +644,8 @@
                         : `Item "${itemData.name}" added successfully with quantity: ${itemData.quantity}`;
                     
                     showNotification(successMsg);
-                    closeModal();
+                    closeModal(); // This now fully resets the form
                     loadItems();
-
-                    // Reset the form and remove the item ID
-                    event.target.reset();
-                    event.target.removeAttribute('data-item-id');
                 } catch (error) {
                     console.error(`Error ${isEdit ? 'updating' : 'adding'} item:`, error);
                     showNotification(`Error ${isEdit ? 'updating' : 'adding'} item`, 'error');
@@ -372,13 +654,34 @@
 
             // Initialize when DOM is ready
             document.addEventListener('DOMContentLoaded', () => {
-                // Load items
+                // Check user role and hide Add New Item button if member
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                if (currentUser && currentUser.role === 'member') {
+                    const addButton = document.querySelector('button[onclick="showAddItemModal()"]');
+                    if (addButton) {
+                        addButton.style.display = 'none';
+                    }
+                }
+                
+                // Load items and categories
                 loadItems();
+                loadCategories();
                 
                 // Add form submit event listener
                 const form = document.getElementById('addItemForm');
                 if (form) {
                     form.addEventListener('submit', handleAddItem);
+                }
+                
+                // Add event listener for category dropdown
+                const categoryDropdown = document.getElementById('itemCategory');
+                if (categoryDropdown) {
+                    categoryDropdown.addEventListener('change', function() {
+                        if (this.value === 'add_new_category') {
+                            // Show the add category modal
+                            showAddCategoryModal();
+                        }
+                    });
                 }
                 
                 // Add search functionality
@@ -416,6 +719,9 @@
                     timeout = setTimeout(later, wait);
                 };
             }
+
+            // Add this function to expose handleAddCategory to the global scope
+            window.handleAddCategory = handleAddCategory;
         })(window);
 
         // Sticky header on scroll
@@ -563,6 +869,7 @@
                                     <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Availability</th>
                                     <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Quantity</th>
+                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Expiration Date</th>
                                     <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
@@ -590,7 +897,14 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Category</label>
-                    <input type="text" id="itemCategory" name="category" class="input-field" required>
+                    <select id="itemCategory" name="category" class="input-field" required>
+                        <option value="">Select Category</option>
+                        <option value="Medical Supplies">Medical Supplies</option>
+                        <option value="Communication">Communication</option>
+                        <option value="PPE">PPE</option>
+                        <option value="Specialized Equipment">Specialized Equipment</option>
+                        <option value="add_new_category">+ Add New Category</option>
+                    </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Status</label>
@@ -615,6 +929,10 @@
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Initial Quantity</label>
                     <input type="number" id="itemQuantity" name="quantity" class="input-field" min="0" value="0" required>
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Expiration Date</label>
+                    <input type="date" id="itemExpirationDate" name="expiration_date" class="input-field">
+                </div>
                 <button type="submit" class="w-full btn-primary">Save Item</button>
             </form>
         </div>
@@ -627,7 +945,7 @@
                 <h2 class="text-xl font-semibold text-secondary-900">Add New Category</h2>
                 <button onclick="closeCategoryModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
             </div>
-            <form id="categoryForm" onsubmit="handleCategorySubmit(event)" class="space-y-4">
+            <form id="categoryForm" onsubmit="handleAddCategory(event)" class="space-y-4">
                 <div>
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Category Name</label>
                     <input type="text" id="newCategoryName" class="input-field" placeholder="Enter category name" required>

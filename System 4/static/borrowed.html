@@ -297,6 +297,13 @@
 
         // Function to show borrow modal
         async function showBorrowItemModal() {
+            // Check if user has permission to borrow items
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser && currentUser.role === 'member') {
+                showToast('You do not have permission to borrow items in the system', 'error');
+                return;
+            }
+            
             await updateAvailableItems();
             borrowForm.reset();
             borrowModal.classList.remove('hidden');
@@ -401,8 +408,14 @@
                 
                 borrowedTableBody.innerHTML = '';
                 
+                // Get current user role
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                const isMember = currentUser && currentUser.role === 'member';
+                
                 items.forEach(item => {
                     const row = document.createElement('tr');
+                    
+                    // Base row HTML
                     row.innerHTML = `
                         <td class="px-6 py-4 whitespace-nowrap">${item.item_name || 'N/A'}</td>
                         <td class="px-6 py-4 whitespace-nowrap">${item.category || 'N/A'}</td>
@@ -416,14 +429,41 @@
                                 ${item.status || 'Unknown'}
                             </span>
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            ${item.status === 'Borrowed' ? `
-                                <button onclick="returnItem('${item.id}')" class="text-primary-600 hover:text-primary-900">
-                                    Return
-                                </button>
-                            ` : ''}
-                        </td>
                     `;
+                    
+                    // Add action buttons cell
+                    const actionsCell = document.createElement('td');
+                    actionsCell.className = "px-6 py-4 whitespace-nowrap text-right text-sm font-medium";
+                    
+                    if (!isMember) {
+                        if (item.status === 'Borrowed') {
+                            // Return button with box-arrow-in icon for borrowed items
+                            actionsCell.innerHTML = `
+                                <button onclick="returnItem('${item.id}')" 
+                                    class="inline-flex items-center justify-center px-2 py-1.5 border border-primary-600 text-primary-600 hover:bg-primary-50 rounded-md transition-colors duration-150"
+                                    title="Return Item">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7" />
+                                    </svg>
+                                </button>
+                            `;
+                        } else {
+                            // Disabled button for already returned items
+                            actionsCell.innerHTML = `
+                                <button disabled
+                                    class="inline-flex items-center justify-center px-2 py-1.5 border border-gray-300 text-gray-400 bg-gray-100 rounded-md cursor-not-allowed"
+                                    title="Already Returned">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </button>
+                            `;
+                        }
+                    } else {
+                        actionsCell.innerHTML = '<span class="text-gray-400">No actions available</span>';
+                    }
+                    
+                    row.appendChild(actionsCell);
                     borrowedTableBody.appendChild(row);
                 });
             } catch (error) {
@@ -433,21 +473,36 @@
         }
 
         // Function to return an item
-        async function returnItem(itemId) {
+        async function returnItem(id) {
+            // Check if user has permission to return items
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser && currentUser.role === 'member') {
+                showToast('You do not have permission to return items', 'error');
+                return;
+            }
+            
+            if (!confirm('Are you sure you want to mark this item as returned?')) return;
+            
             try {
-                const response = await fetch(`${API_BASE_URL}/borrowed-items/${itemId}/return`, {
+                const response = await fetch(`${API_BASE_URL}/borrowed-items/${id}/return`, {
                     method: 'PUT'
                 });
-
+                
                 if (!response.ok) {
-                    throw new Error('Failed to return item');
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-
-                showNotification('Item returned successfully', 'success');
-                await loadBorrowedItems();
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to return item');
+                }
+                
+                showToast('Item returned successfully!', 'success');
+                loadBorrowedItems();
             } catch (error) {
                 console.error('Error returning item:', error);
-                showNotification('Error returning item: ' + error.message, 'error');
+                showToast(error.message || 'Error returning item', 'error');
             }
         }
 
@@ -553,6 +608,15 @@
             loadBorrowedItems();
             toggleDueDateBtn.addEventListener('click', toggleDueDateInput);
             
+            // Check user role and hide Borrow New Item button if member
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser && currentUser.role === 'member') {
+                const borrowButton = document.querySelector('button[onclick="showBorrowItemModal()"]');
+                if (borrowButton) {
+                    borrowButton.style.display = 'none';
+                }
+            }
+            
             // Add keyboard listener for ESC key to close modal
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Escape' && !borrowModal.classList.contains('hidden')) {
@@ -576,6 +640,11 @@
                 }
             });
         });
+
+        // Function to show toast notification (alias for showNotification to maintain compatibility)
+        function showToast(message, type = 'success') {
+            showNotification(message, type);
+        }
     </script>
 </body>
 </html> 

@@ -281,7 +281,7 @@
 
             <main class="p-8">
                 <!-- Quick Actions -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" id="quickActionsGrid">
                     <div class="card cursor-pointer hover:scale-105 transition-transform flex flex-col items-center" onclick="window.location.href='inventory.html'">
                         <div class="mb-4 flex justify-center">
                             <!-- Archive Box Icon -->
@@ -300,7 +300,7 @@
                         </div>
                         <h3 class="text-lg font-semibold text-secondary-900 text-center">Borrowed Items</h3>
                     </div>
-                    <div class="card cursor-pointer hover:scale-105 transition-transform flex flex-col items-center" onclick="window.location.href='notes.html'">
+                    <div class="card cursor-pointer hover:scale-105 transition-transform flex flex-col items-center notes-link" onclick="window.location.href='notes.html'">
                         <div class="mb-4 flex justify-center">
                             <!-- Document Text Icon -->
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -309,7 +309,7 @@
                         </div>
                         <h3 class="text-lg font-semibold text-secondary-900 text-center">Notes</h3>
                     </div>
-                    <div class="card cursor-pointer hover:scale-105 transition-transform flex flex-col items-center" onclick="window.location.href='supplier.html'">
+                    <div class="card cursor-pointer hover:scale-105 transition-transform flex flex-col items-center supplier-link" onclick="window.location.href='supplier.html'">
                         <div class="mb-4 flex justify-center">
                             <!-- Building Storefront Icon -->
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -692,6 +692,28 @@
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             updateUserInfo();
+            
+            // Handle role-specific layout and content
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                // Check if user is a member and adjust grid layout
+                if (currentUser.role === 'member') {
+                    // Limit grid to max 2 columns for members
+                    const quickActionsGrid = document.getElementById('quickActionsGrid');
+                    if (quickActionsGrid) {
+                        quickActionsGrid.classList.remove('lg:grid-cols-4');
+                        quickActionsGrid.classList.add('lg:grid-cols-2');
+                    }
+                    
+                    // Hide Notes and Supplier links for members
+                    const notesLink = document.querySelector('.notes-link');
+                    const supplierLink = document.querySelector('.supplier-link');
+                    
+                    if (notesLink) notesLink.style.display = 'none';
+                    if (supplierLink) supplierLink.style.display = 'none';
+                }
+            }
+            
             displayRecentActivities();
             displayRecentNotifications();
             displayRecentNotes();

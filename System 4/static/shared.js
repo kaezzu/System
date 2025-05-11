@@ -213,6 +213,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (isInventoryPage) {
         checkAndNotifyLowStock();
     }
+    
+    // Apply role-based access control to the navbar
+    applyRoleBasedAccess();
+    
+    // Display role-based access banner
+    displayRoleBasedBanner();
 });
 
 // Function to format role text
@@ -244,7 +250,223 @@ function updateUserInfo() {
     }
 }
 
+// Function to display a role-based access banner
+function displayRoleBasedBanner() {
+    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!currentUser) return;
+    
+    const role = currentUser.role;
+    let bannerText = '';
+    let bannerColor = '';
+    
+    if (role === 'department_head') {
+        bannerText = 'Department Head Access: Full administrative control of the system';
+        bannerColor = 'bg-green-100 border-green-300 text-green-800';
+    } else if (role === 'logistic_officer') {
+        bannerText = 'Logistic Officer Access: You can view and modify inventory, but some administrative features are restricted';
+        bannerColor = 'bg-blue-100 border-blue-300 text-blue-800';
+    } else if (role === 'member') {
+        bannerText = 'Member Access: View-only access to the system. You cannot add, edit, or delete items';
+        bannerColor = 'bg-orange-100 border-orange-300 text-orange-800';
+    }
+    
+    if (bannerText) {
+        // Create the banner
+        const banner = document.createElement('div');
+        banner.className = `py-2 px-4 ${bannerColor} text-sm border-b flex items-center justify-between role-banner`;
+        
+        const textSpan = document.createElement('span');
+        textSpan.textContent = bannerText;
+        
+        const closeButton = document.createElement('button');
+        closeButton.innerHTML = '&times;';
+        closeButton.className = 'ml-2 text-lg font-bold';
+        closeButton.onclick = function() {
+            banner.remove();
+        };
+        
+        banner.appendChild(textSpan);
+        banner.appendChild(closeButton);
+        
+        // Add it right after the header
+        const header = document.querySelector('header');
+        if (header && header.nextSibling) {
+            header.parentNode.insertBefore(banner, header.nextSibling);
+        }
+    }
+}
+
+// Function to apply role-based access control
+function applyRoleBasedAccess() {
+    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!currentUser) return;
+    
+    const role = currentUser.role;
+    
+    // Define access levels for each role
+    const navLinks = document.querySelectorAll('nav a');
+    
+    navLinks.forEach(link => {
+        const href = link.getAttribute('href');
+        
+        // Define which links are visible based on role
+        // Department head has access to everything
+        if (role === 'department_head') {
+            link.style.display = 'flex';
+        } 
+        // Logistic officer has access to most features except certain admin functions
+        else if (role === 'logistic_officer') {
+            if (href.includes('user-activity.html')) {
+                link.style.display = 'none';
+            } else {
+                link.style.display = 'flex';
+            }
+        } 
+        // Regular members have view-only access
+        else if (role === 'member') {
+            // Hide management features
+            if (
+                href.includes('user-activity.html') ||
+                href.includes('supplier.html') ||
+                href.includes('notes.html')
+            ) {
+                link.style.display = 'none';
+            } else {
+                link.style.display = 'flex';
+            }
+            
+            // Disable edit controls for members
+            if (document.readyState === 'complete') {
+                if (href.includes('inventory.html') || href.includes('borrowed.html')) {
+                    // Hide add/edit buttons for members
+                    const addButtons = document.querySelectorAll('.btn-primary:not(.view-only)');
+                    addButtons.forEach(btn => {
+                        if (btn.textContent.includes('Add') || btn.textContent.includes('Edit')) {
+                            btn.style.display = 'none';
+                        }
+                    });
+                    
+                    // Hide delete buttons/icons
+                    const deleteButtons = document.querySelectorAll('.delete-btn, .btn-danger');
+                    deleteButtons.forEach(btn => btn.style.display = 'none');
+                }
+            }
+        }
+    });
+    
+    // Modify quick actions on dashboard
+    if (window.location.pathname.includes('dashboard.html')) {
+        setTimeout(() => {
+            const quickActions = document.querySelectorAll('.card.cursor-pointer');
+            
+            quickActions.forEach(action => {
+                const destination = action.getAttribute('onclick')?.toString() || '';
+                
+                if (role === 'member') {
+                    if (
+                        destination.includes('supplier.html') ||
+                        destination.includes('notes.html')
+                    ) {
+                        action.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Hide "Add Quick Note" button for members
+            if (role === 'member') {
+                const quickNoteBtn = document.querySelector('button[onclick="showQuickNoteModal()"]');
+                if (quickNoteBtn) quickNoteBtn.style.display = 'none';
+            }
+        }, 100);
+    }
+    
+    // Disable add/edit/delete buttons based on role
+    if (role === 'member') {
+        // Inventory and borrowed pages
+        if (window.location.pathname.includes('inventory.html') || 
+            window.location.pathname.includes('borrowed.html')) {
+            
+            // Hide all action buttons for regular members
+            document.addEventListener('DOMContentLoaded', function() {
+                // Hide main action buttons (like "Add New Item")
+                const addButtons = document.querySelectorAll('.btn-primary');
+                addButtons.forEach(btn => {
+                    if (btn.textContent.includes('Add') || btn.textContent.includes('Edit')) {
+                        btn.style.display = 'none';
+                    }
+                });
+                
+                // Hide action buttons in table rows (added via JavaScript)
+                // This will be applied as rows are dynamically added
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'childList') {
+                            const deleteButtons = document.querySelectorAll('.delete-btn, .btn-danger');
+                            deleteButtons.forEach(btn => btn.style.display = 'none');
+                            
+                            const editButtons = document.querySelectorAll('.edit-btn');
+                            editButtons.forEach(btn => btn.style.display = 'none');
+                        }
+                    });
+                });
+                
+                const tableBody = document.getElementById('inventoryTableBody') || 
+                                 document.getElementById('borrowedItemsTableBody');
+                                 
+                if (tableBody) {
+                    observer.observe(tableBody, { childList: true, subtree: true });
+                }
+            });
+        }
+    }
+}
+
 // Initialize user info when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     updateUserInfo();
-}); 
+});
+
+// Function to check if the current user has permission for a specific action
+function hasPermission(action) {
+    const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+    if (!currentUser) return false;
+    
+    const role = currentUser.role;
+    
+    // Define permissions for different actions based on role
+    switch(action) {
+        case 'view_inventory':
+        case 'view_borrowed':
+        case 'view_dashboard':
+            // All roles can view these pages
+            return true;
+            
+        case 'add_item':
+        case 'edit_item':
+        case 'delete_item':
+        case 'borrow_item':
+        case 'return_item':
+            // Only department head and logistic officer can modify inventory
+            return role === 'department_head' || role === 'logistic_officer';
+            
+        case 'view_user_activity':
+        case 'view_supplier':
+        case 'manage_supplier':
+            // Only department head can access these administrative features
+            return role === 'department_head';
+            
+        case 'view_notes':
+        case 'add_note':
+        case 'edit_note':
+        case 'delete_note':
+            // Department head and logistic officer can manage notes
+            return role === 'department_head' || role === 'logistic_officer';
+            
+        default:
+            console.warn(`Unknown permission check for action: ${action}`);
+            return false;
+    }
+}
+
+// Make function available globally
+window.hasPermission = hasPermission; 

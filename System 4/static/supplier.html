@@ -51,11 +51,30 @@
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
                 
-                // Reset form
+                // Reset form and form state
                 const form = document.getElementById('supplierForm');
                 if (form) {
                     form.reset();
                     form.removeAttribute('data-supplier-id');
+                    
+                    // Reset modal title
+                    const modalTitle = document.getElementById('modalTitle');
+                    if (modalTitle) {
+                        modalTitle.textContent = 'Add New Supplier';
+                    }
+                    
+                    // Reset placeholders
+                    document.getElementById('companyName').placeholder = 'Enter company name';
+                    document.getElementById('contactPerson').placeholder = "Enter contact person's name";
+                    document.getElementById('email').placeholder = 'Enter email address';
+                    document.getElementById('phone').placeholder = 'Enter phone number';
+                    document.getElementById('address').placeholder = 'Enter complete address';
+                    
+                    // Reset submit button text
+                    const submitButton = form.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.textContent = 'Save Supplier';
+                    }
                 }
             }
         }
@@ -80,6 +99,13 @@
         // Add form submission handler
         async function handleSubmit(event) {
             event.preventDefault();
+            
+            // Check if user has permission to add/edit suppliers
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser && currentUser.role === 'logistic_officer') {
+                showNotification('Logistic Officers cannot add or edit suppliers', 'error');
+                return;
+            }
             
             const form = event.target;
             const formData = new FormData(form);
@@ -130,6 +156,13 @@
         }
 
         async function editSupplier(id) {
+            // Check if user has permission to edit suppliers
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser && currentUser.role === 'logistic_officer') {
+                showNotification('Logistic Officers cannot edit suppliers', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${API_BASE_URL}/api/suppliers/${id}`);
                 if (!response.ok) throw new Error('Failed to fetch supplier');
@@ -142,16 +175,38 @@
                 const supplier = data.supplier;
                 const form = document.getElementById('supplierForm');
                 
-                // Update form fields
-                document.getElementById('modalTitle').textContent = 'Edit Supplier';
-                document.getElementById('companyName').value = supplier.name;
-                document.getElementById('contactPerson').value = supplier.contact || '';
-                document.getElementById('email').value = supplier.email || '';
-                document.getElementById('phone').value = supplier.phone || '';
-                document.getElementById('address').value = supplier.address || '';
+                // Update modal title
+                document.getElementById('modalTitle').textContent = `Edit Supplier: ${supplier.name}`;
+                
+                // Update form fields with values and placeholders
+                const companyNameInput = document.getElementById('companyName');
+                companyNameInput.value = supplier.name || '';
+                companyNameInput.placeholder = `Current: ${supplier.name || 'N/A'}`;
+                
+                const contactPersonInput = document.getElementById('contactPerson');
+                contactPersonInput.value = supplier.contact || '';
+                contactPersonInput.placeholder = `Current: ${supplier.contact || 'N/A'}`;
+                
+                const emailInput = document.getElementById('email');
+                emailInput.value = supplier.email || '';
+                emailInput.placeholder = `Current: ${supplier.email || 'N/A'}`;
+                
+                const phoneInput = document.getElementById('phone');
+                phoneInput.value = supplier.phone || '';
+                phoneInput.placeholder = `Current: ${supplier.phone || 'N/A'}`;
+                
+                const addressInput = document.getElementById('address');
+                addressInput.value = supplier.address || '';
+                addressInput.placeholder = `Current: ${supplier.address || 'N/A'}`;
                 
                 // Store the supplier ID for update
                 form.setAttribute('data-supplier-id', supplier.supplier_id);
+                
+                // Update the submit button text to indicate editing
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.textContent = 'Update Supplier';
+                }
                 
                 // Show modal
                 const modal = document.getElementById('supplierModal');
@@ -164,6 +219,19 @@
         }
 
         async function deleteSupplier(id) {
+            // Check if user has permission to delete suppliers
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser && currentUser.role === 'member') {
+                showNotification('You do not have permission to delete suppliers', 'error');
+                return;
+            }
+            
+            // Additional check for logistic officers
+            if (currentUser && currentUser.role === 'logistic_officer') {
+                showNotification('Logistic Officers cannot delete suppliers', 'error');
+                return;
+            }
+            
             if (!confirm('Are you sure you want to delete this supplier?')) return;
             
             try {
@@ -198,6 +266,29 @@
                 document.getElementById('sidebarUserName').textContent = currentUser.username;
                 document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
                 document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+                
+                // Hide or show navigation items based on user role
+                updateNavigationVisibility(currentUser.role);
+            }
+        }
+        
+        // Function to update navigation visibility based on user role
+        function updateNavigationVisibility(role) {
+            // Elements to hide for certain roles
+            const userActivityLink = document.getElementById('userActivityLink');
+            const addSupplierButton = document.getElementById('addSupplierButton');
+            
+            if (role === 'member' || role === 'logistic_officer') {
+                // Hide user activity link for members and logistic officers
+                if (userActivityLink) userActivityLink.style.display = 'none';
+            } else {
+                // Show for department_head and other roles
+                if (userActivityLink) userActivityLink.style.display = 'flex';
+            }
+            
+            // Specifically hide add supplier button for logistic officers
+            if (role === 'logistic_officer') {
+                if (addSupplierButton) addSupplierButton.style.display = 'none';
             }
         }
 
@@ -218,6 +309,22 @@
         document.addEventListener('DOMContentLoaded', () => {
             updateUserInfo();
             fetchSuppliers();
+            
+            // Add keyboard listener for ESC key to close modal
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape') {
+                    closeModal();
+                }
+            });
+            
+            // Add click event listener to the modal backdrop
+            const supplierModal = document.getElementById('supplierModal');
+            supplierModal.addEventListener('click', function(event) {
+                // Close the modal only if the click was directly on the backdrop
+                if (event.target === supplierModal) {
+                    closeModal();
+                }
+            });
         });
 
         // Fetch and display suppliers
@@ -261,6 +368,10 @@
             const tableBody = document.getElementById('supplierTableBody');
             tableBody.innerHTML = '';
 
+            // Get current user role
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            const isLogisticOfficer = currentUser && currentUser.role === 'logistic_officer';
+
             if (suppliers.length === 0) {
                 tableBody.innerHTML = `
                     <tr>
@@ -272,18 +383,25 @@
                 return;
             }
 
+            // Helper function to truncate text
+            function truncateText(text, maxLength = 30) {
+                if (!text) return '-';
+                return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+            }
+
             suppliers.forEach(supplier => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50';
                 row.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.supplier_id}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.name}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.contact}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.email}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.phone || '-'}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.address || '-'}</td>
+                    <td class="px-6 py-4 text-center" title="${supplier.name || ''}">${truncateText(supplier.name, 25)}</td>
+                    <td class="px-6 py-4 text-center" title="${supplier.contact || ''}">${truncateText(supplier.contact, 25)}</td>
+                    <td class="px-6 py-4 text-center" title="${supplier.email || ''}">${truncateText(supplier.email, 25)}</td>
+                    <td class="px-6 py-4 text-center" title="${supplier.phone || ''}">${truncateText(supplier.phone, 15)}</td>
+                    <td class="px-6 py-4 text-center" title="${supplier.address || ''}">${truncateText(supplier.address, 30)}</td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         <div class="flex items-center justify-center space-x-3">
+                            ${!isLogisticOfficer ? `
                             <button onclick="editSupplier('${supplier.supplier_id}')" 
                                 class="inline-flex items-center justify-center px-2 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
                                 title="Edit">
@@ -298,6 +416,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
                                 </svg>
                             </button>
+                            ` : 'View Only'}
                         </div>
                     </td>
                 `;
@@ -402,7 +521,7 @@
                     </svg>
                     <span>Borrowed Items</span>
                 </a>
-                <a href="user-activity.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                <a href="user-activity.html" id="userActivityLink" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
                     </svg>
