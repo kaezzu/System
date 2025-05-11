@@ -40,6 +40,38 @@
             animation: pulse 2s infinite;
         }
         
+        /* Sortable table styles */
+        th.cursor-pointer {
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        
+        th.cursor-pointer:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        
+        th.cursor-pointer span {
+            display: inline-block;
+            font-size: 0.75rem;
+            vertical-align: middle;
+            margin-left: 0.25rem;
+            color: #4F46E5; /* Primary color for better visibility */
+        }
+        
+        /* Active sort column highlighting */
+        th.active-sort {
+            background-color: rgba(79, 70, 229, 0.05); /* Light primary color background */
+            color: #4F46E5; /* Primary color text */
+            font-weight: 600;
+        }
+        
+        th.active-sort span {
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+        
         @keyframes pulse {
             0% {
                 box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
@@ -56,6 +88,16 @@
         // Make functions globally available
         (function(window) {
             const API_BASE_URL = 'http://localhost:3000';
+            
+            // Define sort state
+            let currentSort = {
+                column: 'product_id',  // Default sort column
+                order: 'DESC'          // Default sort order
+            };
+            
+            // Make sort state and function accessible globally
+            window.currentSort = currentSort;
+            window.sortItems = sortItems;
 
             // Define global functions
             window.showAddItemModal = function() {
@@ -108,7 +150,7 @@
                 // Check if user has permission to edit items
                 const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
                 if (currentUser && currentUser.role === 'member') {
-                    showToast('You do not have permission to edit items', 'error');
+                    showNotification('You do not have permission to edit items', 'error');
                     return;
                 }
                 
@@ -191,6 +233,26 @@
                     
                     document.getElementById('itemExpirationDate').value = item.expiration_date || '';
                     document.getElementById('itemExpirationDate').placeholder = `Current: ${item.expiration_date || 'None'}`;
+                    
+                    // Add hidden fields with current values
+                    let hiddenFields = document.getElementById('hiddenFields');
+                    if (!hiddenFields) {
+                        hiddenFields = document.createElement('div');
+                        hiddenFields.id = 'hiddenFields';
+                        document.getElementById('addItemForm').appendChild(hiddenFields);
+                    } else {
+                        hiddenFields.innerHTML = ''; // Clear any existing hidden fields
+                    }
+                    
+                    // Add hidden fields for each property
+                    const properties = ['name', 'category', 'status', 'availability', 'quantity', 'expiration_date'];
+                    properties.forEach(prop => {
+                        const hiddenField = document.createElement('input');
+                        hiddenField.type = 'hidden';
+                        hiddenField.name = `original_${prop}`;
+                        hiddenField.value = item[prop] || '';
+                        hiddenFields.appendChild(hiddenField);
+                    });
                     
                     // Store the item ID for update
                     document.getElementById('addItemForm').setAttribute('data-item-id', item.product_id);
@@ -447,7 +509,8 @@
             // Internal functions
             async function loadItems() {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/api/items`);
+                    // Use currentSort for API request
+                    const response = await fetch(`${API_BASE_URL}/api/items?sort_by=${currentSort.column}&sort_order=${currentSort.order}`);
                     if (!response.ok) throw new Error('Failed to load items');
                     const data = await response.json();
                     
@@ -462,6 +525,9 @@
                         return;
                     }
                     tableBody.innerHTML = '';
+                    
+                    // Update sort indicators
+                    updateSortIndicators();
                     
                     // Get current user role
                     const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
@@ -606,17 +672,44 @@
                 event.preventDefault();
                 
                 const formData = new FormData(event.target);
-                const itemData = {
-                    name: formData.get('name'),
-                    category: formData.get('category'),
-                    status: formData.get('status'),
-                    availability: formData.get('availability'),
-                    quantity: formData.get('quantity'),
-                    expiration_date: formData.get('expiration_date')
-                };
-
                 const itemId = event.target.getAttribute('data-item-id');
                 const isEdit = !!itemId;
+                
+                let itemData = {};
+                
+                if (isEdit) {
+                    // For edit mode, use original values if fields are empty
+                    const fields = ['name', 'category', 'status', 'availability', 'quantity', 'expiration_date'];
+                    
+                    fields.forEach(field => {
+                        const newValue = formData.get(field);
+                        const originalValue = formData.get(`original_${field}`);
+                        
+                        // Use the new value if it's not empty, otherwise use the original
+                        if (field === 'quantity') {
+                            // Handle quantity specially to ensure it's a number
+                            const newQuantity = newValue !== null && newValue !== '' ? parseInt(newValue) : null;
+                            const origQuantity = originalValue !== null && originalValue !== '' ? parseInt(originalValue) : 0;
+                            itemData[field] = newQuantity !== null ? newQuantity : origQuantity;
+                        } else if (newValue === '' || newValue === null) {
+                            // For empty/null values, use the original
+                            itemData[field] = originalValue || null;
+                        } else {
+                            // Otherwise use the new value
+                            itemData[field] = newValue;
+                        }
+                    });
+                } else {
+                    // For new items, just use the form data
+                    itemData = {
+                        name: formData.get('name'),
+                        category: formData.get('category'),
+                        status: formData.get('status'),
+                        availability: formData.get('availability'),
+                        quantity: formData.get('quantity'),
+                        expiration_date: formData.get('expiration_date')
+                    };
+                }
                 
                 try {
                     const url = isEdit ? 
@@ -684,6 +777,14 @@
                     });
                 }
                 
+                // Add category filter event listener
+                const categoryFilter = document.getElementById('categoryFilter');
+                if (categoryFilter) {
+                    categoryFilter.addEventListener('change', function() {
+                        filterByCategory(this.value);
+                    });
+                }
+                
                 // Add search functionality
                 const searchInput = document.getElementById('searchInput');
                 if (searchInput) {
@@ -722,237 +823,424 @@
 
             // Add this function to expose handleAddCategory to the global scope
             window.handleAddCategory = handleAddCategory;
-        })(window);
 
-        // Sticky header on scroll
-        document.addEventListener('DOMContentLoaded', function() {
-            const header = document.querySelector('header');
-            const stickyClass = 'sticky-header';
-            window.addEventListener('scroll', function() {
-                if (window.scrollY > 0) {
-                    header.classList.add(stickyClass);
+            // Sort function for items
+            function sortItems(column) {
+                // If same column, toggle the order
+                if (currentSort.column === column) {
+                    currentSort.order = currentSort.order === 'ASC' ? 'DESC' : 'ASC';
                 } else {
-                    header.classList.remove(stickyClass);
+                    // If new column, set it and default to ASC
+                    currentSort.column = column;
+                    currentSort.order = 'ASC';
                 }
-            });
-        });
-    </script>
-</head>
-<body class="min-h-screen bg-secondary-50">
-    <script>
-        // Check if user is logged in
-        if (!sessionStorage.getItem('isLoggedIn')) {
-            window.location.href = 'index.html';
-        }
-    </script>
-
-    <!-- Toast container for notifications -->
-    <div id="toastContainer" class="toast-container"></div>
-
-    <div class="flex h-screen">
-        <!-- Sidebar -->
-        <div class="w-64 bg-white shadow-lg">
-            <div class="h-28 flex items-center border-b border-secondary-200 px-4 pt-6 pb-6" style="padding-top: 6px; padding-bottom: 6px;">
-                <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
-                        </svg>
-                    </div>
-                    <div>
-                        <p class="font-medium text-secondary-900" id="sidebarUserName">Loading...</p>
-                        <p class="text-sm text-secondary-600" id="sidebarUserRole">Loading...</p>
-                        <p class="text-xs text-secondary-500" id="sidebarUserFullName">Loading...</p>
-                    </div>
-                </div>
-            </div>
-
-            <nav class="p-4 space-y-2">
-                <a href="dashboard.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
-                    </svg>
-                    <span>Home</span>
-                </a>
-                <a href="inventory.html" class="flex items-center space-x-3 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg transition-all duration-200 hover:bg-primary-100">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                    </svg>
-                    <span>Inventory</span>
-                </a>
-                <a href="borrowed.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
-                    </svg>
-                    <span>Borrowed Items</span>
-                </a>
-                <a href="user-activity.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                    </svg>
-                    <span>User Activity</span>
-                </a>
-                <a href="supplier.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
-                    </svg>
-                    <span>Supplier</span>
-                </a>
-                <a href="notifications.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                    </svg>
-                    <span>Notifications</span>
-                </a>
-                <a href="notes.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
-                    </svg>
-                    <span>Notes</span>
-                </a>
-            </nav>
-
-            <div class="absolute bottom-0 w-64 p-4 border-t border-secondary-200">
-                <button onclick="logout()" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg w-full transition-all duration-200 hover:text-primary-600">
-                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                    </svg>
-                    <span>Logout</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Main Content -->
-        <div class="flex-1 overflow-auto">
-            <header class="bg-white shadow-sm">
-                <div class="px-8 py-4 flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <img src="img/school_logo.png" alt="School Logo" class="h-10">
-                        <h1 class="text-xl font-semibold text-secondary-900">Inventory Management</h1>
-                    </div>
                 
-                </div>
-            </header>
+                // Reload items with new sort
+                loadItems();
+            }
+            
+            // Update sort indicators in the table header
+            function updateSortIndicators() {
+                // First clear all indicators and active classes
+                document.querySelectorAll('span[id^="sort-"]').forEach(span => {
+                    span.innerHTML = '';
+                    // Remove active class from parent th element
+                    const th = span.closest('th');
+                    if (th) {
+                        th.classList.remove('active-sort');
+                    }
+                });
+                
+                // Set the current sort indicator
+                const indicatorSpan = document.getElementById(`sort-${currentSort.column}`);
+                if (indicatorSpan) {
+                    // Use arrow indicators for sort direction
+                    indicatorSpan.innerHTML = currentSort.order === 'ASC' 
+                        ? '&#9650;' // Up arrow for ascending
+                        : '&#9660;' // Down arrow for descending
+                    
+                    // Add active class to highlight the sorted column
+                    const th = indicatorSpan.closest('th');
+                    if (th) {
+                        th.classList.add('active-sort');
+                    }
+                }
+            }
 
-            <main class="p-8">
-                <!-- Controls -->
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                    <button onclick="showAddItemModal()" class="btn-primary flex items-center space-x-2">
-                        <span>+</span>
-                        <span>Add New Item</span>
-                    </button>
-                    <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                        <div class="relative flex-1 md:w-64">
-                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <svg class="w-4 h-4 text-secondary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
+            // Function to filter by category
+            async function filterByCategory(category) {
+                try {
+                    // If no category selected, just use the normal sort
+                    if (!category) {
+                        loadItems();
+                        return;
+                    }
+                    
+                    // Get items with current sort and filter by category client-side
+                    const response = await fetch(`${API_BASE_URL}/api/items?sort_by=${currentSort.column}&sort_order=${currentSort.order}`);
+                    if (!response.ok) throw new Error('Failed to load items');
+                    const data = await response.json();
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to load items');
+                    }
+                    
+                    // Filter items by category
+                    const filteredItems = data.items.filter(item => item.category === category);
+                    
+                    // Update the table with filtered items
+                    displayItems(filteredItems);
+                } catch (error) {
+                    console.error('Error filtering by category:', error);
+                    showNotification('Error filtering items', 'error');
+                }
+            }
+            
+            // Function to display items (separate from loadItems to reuse code)
+            function displayItems(items) {
+                const tableBody = document.getElementById('inventoryTableBody');
+                if (!tableBody) {
+                    console.error('Could not find inventory table body');
+                    return;
+                }
+                tableBody.innerHTML = '';
+                
+                // Update sort indicators
+                updateSortIndicators();
+                
+                // Get current user role
+                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+                const isMember = currentUser && currentUser.role === 'member';
+                const isLogisticOfficer = currentUser && currentUser.role === 'logistic_officer';
+                
+                items.forEach(item => {
+                    const row = document.createElement('tr');
+                    
+                    // Create base row content
+                    row.innerHTML = `
+                        <td class="px-6 py-4 text-center">${item.product_id}</td>
+                        <td class="px-6 py-4 text-center">${item.name}</td>
+                        <td class="px-6 py-4 text-center">${item.category || '-'}</td>
+                        <td class="px-6 py-4 text-center">${item.status}</td>
+                        <td class="px-6 py-4 text-center">${item.availability}</td>
+                        <td class="px-6 py-4 text-center">${item.quantity || 0}</td>
+                        <td class="px-6 py-4 text-center">${item.expiration_date || '-'}</td>
+                    `;
+                    
+                    // Add action buttons cell - only if not a member
+                    const actionsCell = document.createElement('td');
+                    actionsCell.className = "px-6 py-4 text-center";
+                    
+                    if (!isMember) {
+                        // Create different action buttons based on user role
+                        let actionsHtml = `
+                            <div class="flex items-center justify-center space-x-3">
+                                <button onclick="editItem(${item.product_id})"
+                                    class="inline-flex items-center justify-center px-2 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
+                                    title="Edit Item"
+                                    aria-label="Edit Item">
+                                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                    </svg>
+                                </button>`;
+                                    
+                                // Only show delete button if user is NOT a logistic officer
+                                if (!isLogisticOfficer) {
+                                    actionsHtml += `
+                                        <button onclick="deleteItem(${item.product_id})"
+                                            class="inline-flex items-center justify-center px-2 py-1.5 border border-red-600 text-red-600 hover:bg-red-50 rounded-md transition-colors duration-150"
+                                            title="Delete Item"
+                                            aria-label="Delete Item">
+                                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>`;
+                                } else {
+                                    // For logistic officers, show a disabled delete button or informational text
+                                    actionsHtml += `
+                                        <button disabled
+                                            class="inline-flex items-center justify-center px-2 py-1.5 text-gray-400 cursor-not-allowed rounded-md"
+                                            title="Delete not allowed for Logistic Officers"
+                                            aria-label="Delete not allowed">
+                                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>`;
+                                }
+                                    
+                                actionsHtml += `
+                                    <button onclick="showQuantityModal(${item.product_id}, '${item.name}', ${item.quantity || 0})"
+                                        class="inline-flex items-center justify-center px-2 py-1.5 border border-green-600 text-green-600 hover:bg-green-50 rounded-md transition-colors duration-150"
+                                        title="Manage Quantity"
+                                        aria-label="Manage Quantity">
+                                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                                        </svg>
+                                    </button>
+                                </div>`;
+                                
+                                actionsCell.innerHTML = actionsHtml;
+                            } else {
+                                // For members, just display "No actions available"
+                                actionsCell.innerHTML = `<span class="text-gray-400 text-sm">No actions available</span>`;
+                            }
+                            
+                            row.appendChild(actionsCell);
+                            tableBody.appendChild(row);
+                        });
+                    }
+                })(window);
+
+                // Sticky header on scroll
+                document.addEventListener('DOMContentLoaded', function() {
+                    const header = document.querySelector('header');
+                    const stickyClass = 'sticky-header';
+                    window.addEventListener('scroll', function() {
+                        if (window.scrollY > 0) {
+                            header.classList.add(stickyClass);
+                        } else {
+                            header.classList.remove(stickyClass);
+                        }
+                    });
+                });
+            </script>
+        </head>
+        <body class="min-h-screen bg-secondary-50">
+            <script>
+                // Check if user is logged in
+                if (!sessionStorage.getItem('isLoggedIn')) {
+                    window.location.href = 'index.html';
+                }
+            </script>
+
+            <!-- Toast container for notifications -->
+            <div id="toastContainer" class="toast-container"></div>
+
+            <div class="flex h-screen">
+                <!-- Sidebar -->
+                <div class="w-64 bg-white shadow-lg">
+                    <div class="h-28 flex items-center border-b border-secondary-200 px-4 pt-6 pb-6" style="padding-top: 6px; padding-bottom: 6px;">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                                 </svg>
                             </div>
-                            <input type="text" id="searchInput" placeholder="Search items..." 
-                                class="input-field pl-10">
+                            <div>
+                                <p class="font-medium text-secondary-900" id="sidebarUserName">Loading...</p>
+                                <p class="text-sm text-secondary-600" id="sidebarUserRole">Loading...</p>
+                                <p class="text-xs text-secondary-500" id="sidebarUserFullName">Loading...</p>
+                            </div>
                         </div>
-                        <select id="categoryFilter" class="input-field md:w-48">
-                            <option value="">All Categories</option>
-                        </select>
+                    </div>
+
+                    <nav class="p-4 space-y-2">
+                        <a href="dashboard.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                            </svg>
+                            <span>Home</span>
+                        </a>
+                        <a href="inventory.html" class="flex items-center space-x-3 px-4 py-2 bg-primary-50 text-primary-700 rounded-lg transition-all duration-200 hover:bg-primary-100">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                            </svg>
+                            <span>Inventory</span>
+                        </a>
+                        <a href="borrowed.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                            </svg>
+                            <span>Borrowed Items</span>
+                        </a>
+                        <a href="user-activity.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                            </svg>
+                            <span>User Activity</span>
+                        </a>
+                        <a href="supplier.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                            </svg>
+                            <span>Supplier</span>
+                        </a>
+                        <a href="notifications.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                            </svg>
+                            <span>Notifications</span>
+                        </a>
+                        <a href="notes.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
+                            </svg>
+                            <span>Notes</span>
+                        </a>
+                    </nav>
+
+                    <div class="absolute bottom-0 w-64 p-4 border-t border-secondary-200">
+                        <button onclick="logout()" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg w-full transition-all duration-200 hover:text-primary-600">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                            </svg>
+                            <span>Logout</span>
+                        </button>
                     </div>
                 </div>
 
-                <!-- Table -->
-                <div class="bg-white rounded-lg shadow overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-secondary-200">
-                            <thead class="bg-secondary-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Product ID</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Name</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Category</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Availability</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Quantity</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Expiration Date</th>
-                                    <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="inventoryTableBody" class="bg-white divide-y divide-secondary-200">
-                                <!-- Table rows will be dynamically populated -->
-                            </tbody>
-                        </table>
+                <!-- Main Content -->
+                <div class="flex-1 overflow-auto">
+                    <header class="bg-white shadow-sm">
+                        <div class="px-8 py-4 flex items-center justify-between">
+                            <div class="flex items-center space-x-4">
+                                <img src="img/school_logo.png" alt="School Logo" class="h-10">
+                                <h1 class="text-xl font-semibold text-secondary-900">Inventory Management</h1>
+                            </div>
+                        
+                        </div>
+                    </header>
+
+                    <main class="p-8">
+                        <!-- Controls -->
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                            <button onclick="showAddItemModal()" class="btn-primary flex items-center space-x-2">
+                                <span>+</span>
+                                <span>Add New Item</span>
+                            </button>
+                            <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                                <div class="relative flex-1 md:w-64">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <svg class="w-4 h-4 text-secondary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 104.5 4.5a7.5 7.5 0 0012.15 12.15z" />
+                                        </svg>
+                                    </div>
+                                    <input type="text" id="searchInput" placeholder="Search items..." 
+                                        class="input-field pl-10">
+                                </div>
+                                <select id="categoryFilter" class="input-field md:w-48">
+                                    <option value="">All Categories</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="bg-white rounded-lg shadow overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-secondary-200">
+                                    <thead class="bg-secondary-50">
+                                        <tr>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('product_id')">
+                                                Product ID
+                                                <span id="sort-product_id" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('name')">
+                                                Name
+                                                <span id="sort-name" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('category')">
+                                                Category
+                                                <span id="sort-category" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('status')">
+                                                Status
+                                                <span id="sort-status" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('availability')">
+                                                Availability
+                                                <span id="sort-availability" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('quantity')">
+                                                Quantity
+                                                <span id="sort-quantity" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider cursor-pointer hover:bg-secondary-100" onclick="sortItems('expiration_date')">
+                                                Expiration Date
+                                                <span id="sort-expiration_date" class="inline-block ml-1"></span>
+                                            </th>
+                                            <th class="px-6 py-3 text-center text-xs font-medium text-secondary-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="inventoryTableBody" class="bg-white divide-y divide-secondary-200">
+                                        <!-- Table rows will be dynamically populated -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            </div>
+
+            <!-- Add Item Modal -->
+            <div id="addItemModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+                <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-secondary-900">Add New Item</h2>
+                        <button onclick="closeModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
                     </div>
+                    <form id="addItemForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Item Name</label>
+                            <input type="text" id="itemName" name="name" class="input-field" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Category</label>
+                            <select id="itemCategory" name="category" class="input-field" required>
+                                <option value="">Select Category</option>
+                                <option value="Medical Supplies">Medical Supplies</option>
+                                <option value="Communication">Communication</option>
+                                <option value="PPE">PPE</option>
+                                <option value="Specialized Equipment">Specialized Equipment</option>
+                                <option value="add_new_category">+ Add New Category</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Status</label>
+                            <select id="itemStatus" name="status" class="input-field" required>
+                                <option value="">Select Status</option>
+                                <option value="Available">Available</option>
+                                <option value="In Use">In Use</option>
+                                <option value="Maintenance">Maintenance</option>
+                                <option value="Retired">Retired</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Availability</label>
+                            <select id="itemAvailability" name="availability" class="input-field" required>
+                                <option value="">Select Availability</option>
+                                <option value="In Stock">In Stock</option>
+                                <option value="Out of Stock">Out of Stock</option>
+                                <option value="Limited">Limited</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Initial Quantity</label>
+                            <input type="number" id="itemQuantity" name="quantity" class="input-field" min="0" value="0" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Expiration Date</label>
+                            <input type="date" id="itemExpirationDate" name="expiration_date" class="input-field">
+                        </div>
+                        <button type="submit" class="w-full btn-primary">Save Item</button>
+                    </form>
                 </div>
-            </main>
-        </div>
-    </div>
-
-    <!-- Add Item Modal -->
-    <div id="addItemModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white rounded-lg p-6 w-full max-w-md">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-semibold text-secondary-900">Add New Item</h2>
-                <button onclick="closeModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
             </div>
-            <form id="addItemForm" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Item Name</label>
-                    <input type="text" id="itemName" name="name" class="input-field" required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Category</label>
-                    <select id="itemCategory" name="category" class="input-field" required>
-                        <option value="">Select Category</option>
-                        <option value="Medical Supplies">Medical Supplies</option>
-                        <option value="Communication">Communication</option>
-                        <option value="PPE">PPE</option>
-                        <option value="Specialized Equipment">Specialized Equipment</option>
-                        <option value="add_new_category">+ Add New Category</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Status</label>
-                    <select id="itemStatus" name="status" class="input-field" required>
-                        <option value="">Select Status</option>
-                        <option value="Available">Available</option>
-                        <option value="In Use">In Use</option>
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Retired">Retired</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Availability</label>
-                    <select id="itemAvailability" name="availability" class="input-field" required>
-                        <option value="">Select Availability</option>
-                        <option value="In Stock">In Stock</option>
-                        <option value="Out of Stock">Out of Stock</option>
-                        <option value="Limited">Limited</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Initial Quantity</label>
-                    <input type="number" id="itemQuantity" name="quantity" class="input-field" min="0" value="0" required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Expiration Date</label>
-                    <input type="date" id="itemExpirationDate" name="expiration_date" class="input-field">
-                </div>
-                <button type="submit" class="w-full btn-primary">Save Item</button>
-            </form>
-        </div>
-    </div>
 
-    <!-- Add Category Modal -->
-    <div id="categoryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white rounded-lg p-6 w-full max-w-md">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-semibold text-secondary-900">Add New Category</h2>
-                <button onclick="closeCategoryModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
-            </div>
-            <form id="categoryForm" onsubmit="handleAddCategory(event)" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Category Name</label>
-                    <input type="text" id="newCategoryName" class="input-field" placeholder="Enter category name" required>
+            <!-- Add Category Modal -->
+            <div id="categoryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+                <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-secondary-900">Add New Category</h2>
+                        <button onclick="closeCategoryModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
+                    </div>
+                    <form id="categoryForm" onsubmit="handleAddCategory(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-secondary-700 mb-1">Category Name</label>
+                            <input type="text" id="newCategoryName" class="input-field" placeholder="Enter category name" required>
+                        </div>
+                        <button type="submit" class="w-full btn-primary">Add Category</button>
+                    </form>
                 </div>
-                <button type="submit" class="w-full btn-primary">Add Category</button>
-            </form>
-        </div>
-    </div>
-</body>
-</html> 
+            </div>
+        </body>
+    </html> 

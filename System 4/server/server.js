@@ -270,7 +270,35 @@ async function generateItemId() {
 // Inventory items endpoints
 app.get('/api/items', async (req, res) => {
     try {
-        const items = await getAll('SELECT * FROM items ORDER BY product_id DESC');
+        const { sort_by, sort_order } = req.query;
+        let query = 'SELECT * FROM items';
+        
+        // Add sorting if sort parameters are provided
+        if (sort_by) {
+            const validColumns = ['product_id', 'name', 'category', 'status', 'availability', 'quantity', 'expiration_date'];
+            const validOrders = ['ASC', 'DESC'];
+            
+            // Validate sort_by parameter to prevent SQL injection
+            if (validColumns.includes(sort_by)) {
+                query += ` ORDER BY ${sort_by}`;
+                
+                // Add sort order if valid
+                if (sort_order && validOrders.includes(sort_order.toUpperCase())) {
+                    query += ` ${sort_order.toUpperCase()}`;
+                } else {
+                    // Default to ascending order
+                    query += ' ASC';
+                }
+            } else {
+                // Default sorting if invalid column specified
+                query += ' ORDER BY product_id DESC';
+            }
+        } else {
+            // Default sorting (as before) if no sort params
+            query += ' ORDER BY product_id DESC';
+        }
+        
+        const items = await getAll(query);
         res.setHeader('Content-Type', 'application/json');
         res.json({ success: true, items });
     } catch (err) {
