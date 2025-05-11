@@ -15,6 +15,34 @@ const db = new sqlite3.Database(path.join(__dirname, 'inventory.db'), (err) => {
 async function initializeDatabase() {
     console.log('Initializing database...');
     db.serialize(() => {
+        // Check if borrowed_items table exists
+        db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='borrowed_items'", (err, row) => {
+            if (err) {
+                console.error('Error checking borrowed_items table:', err);
+            } else {
+                console.log('borrowed_items table exists:', !!row);
+            }
+        });
+
+        // Check if items table exists
+        db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='items'", (err, row) => {
+            if (err) {
+                console.error('Error checking items table:', err);
+            } else {
+                console.log('items table exists:', !!row);
+                if (row) {
+                    // Check table structure
+                    db.all("PRAGMA table_info(items)", (err, columns) => {
+                        if (err) {
+                            console.error('Error getting items table structure:', err);
+                        } else {
+                            console.log('items table structure:', columns);
+                        }
+                    });
+                }
+            }
+        });
+
         // Categories table
         db.run(`CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,9 +178,16 @@ async function initializeDatabase() {
 // Helper function to run queries with promises
 function runQuery(query, params = []) {
     return new Promise((resolve, reject) => {
+        console.log('Executing query:', query); // Debug log
+        console.log('With params:', params); // Debug log
         db.run(query, params, function(err) {
-            if (err) reject(err);
-            else resolve(this);
+            if (err) {
+                console.error('Query error:', err); // Debug log
+                reject(err);
+            } else {
+                console.log('Query successful'); // Debug log
+                resolve(this);
+            }
         });
     });
 }
@@ -160,9 +195,16 @@ function runQuery(query, params = []) {
 // Helper function to get all rows with promises
 function getAll(query, params = []) {
     return new Promise((resolve, reject) => {
+        console.log('Executing getAll query:', query); // Debug log
+        console.log('With params:', params); // Debug log
         db.all(query, params, (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows);
+            if (err) {
+                console.error('getAll error:', err); // Debug log
+                reject(err);
+            } else {
+                console.log('getAll successful, rows:', rows); // Debug log
+                resolve(rows);
+            }
         });
     });
 }

@@ -46,6 +46,167 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
+// Helper function to set default due date (1 year from now)
+function getDefaultDueDate() {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() + 1);
+    return date.toISOString().split('T')[0];
+}
+
+// Borrowed Items endpoints
+app.get('/api/borrowed-items', async (req, res) => {
+    try {
+        console.log('Fetching borrowed items...'); // Debug log
+        const borrowedItems = await getAll('SELECT * FROM borrowed_items ORDER BY borrow_date DESC');
+        console.log('Borrowed items:', borrowedItems); // Debug log
+        res.json(borrowedItems);
+    } catch (err) {
+        console.error('Error fetching borrowed items:', err); // Debug log
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/borrowed-items', async (req, res) => {
+    const {
+        item_id,
+        item_name,
+        category,
+        quantity,
+        borrower_name,
+        department,
+        due_date
+    } = req.body;
+
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Check if item exists and has enough quantity
+            const item = await getOne('SELECT * FROM items WHERE product_id = ?', [item_id]);
+            
+            if (!item) {
+                await runQuery('ROLLBACK');
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            
+            if (item.quantity < quantity) {
+                await runQuery('ROLLBACK');
+                return res.status(400).json({ error: 'Not enough quantity available' });
+            }
+            
+            // Subtract borrowed quantity from available inventory
+            await runQuery(
+                'UPDATE items SET quantity = quantity - ? WHERE product_id = ?',
+                [quantity, item_id]
+            );
+
+            const newBorrowedItem = {
+                id: Date.now().toString(),
+                item_id,
+                item_name,
+                category,
+                quantity,
+                borrower_name,
+                department,
+                borrow_date: new Date().toISOString().split('T')[0],
+                due_date: due_date || getDefaultDueDate(),
+                status: 'Borrowed'
+            };
+
+            // Insert into database
+            await runQuery(
+                `INSERT INTO borrowed_items (
+                    id, item_id, item_name, category, quantity, 
+                    borrower_name, department, borrow_date, due_date, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    newBorrowedItem.id,
+                    newBorrowedItem.item_id,
+                    newBorrowedItem.item_name,
+                    newBorrowedItem.category,
+                    newBorrowedItem.quantity,
+                    newBorrowedItem.borrower_name,
+                    newBorrowedItem.department,
+                    newBorrowedItem.borrow_date,
+                    newBorrowedItem.due_date,
+                    newBorrowedItem.status
+                ]
+            );
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (datetime('now'), ?, ?)`,
+                ['borrow_item', `${borrower_name} borrowed ${quantity} ${item_name}(s). Inventory updated.`]
+            );
+
+            await runQuery('COMMIT');
+            res.status(201).json(newBorrowedItem);
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error creating borrowed item:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/borrowed-items/:id/return', async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            const item = await getOne('SELECT * FROM borrowed_items WHERE id = ?', [id]);
+            
+            if (!item) {
+                await runQuery('ROLLBACK');
+                return res.status(404).json({ error: 'Item not found' });
+            }
+            
+            // Only add quantity back if the item is not already returned
+            if (item.status !== 'Returned') {
+                // Add returned quantity back to inventory
+                await runQuery(
+                    'UPDATE items SET quantity = quantity + ? WHERE product_id = ?',
+                    [item.quantity, item.item_id]
+                );
+                
+                // Update status and return date
+                await runQuery(
+                    `UPDATE borrowed_items 
+                     SET status = ?, return_date = datetime('now')
+                     WHERE id = ?`,
+                    ['Returned', id]
+                );
+                
+                // Log activity
+                await runQuery(
+                    `INSERT INTO activity_log (timestamp, action, details) 
+                     VALUES (datetime('now'), ?, ?)`,
+                    ['return_item', `${item.borrower_name} returned ${item.quantity} ${item.item_name}(s). Inventory updated.`]
+                );
+            } else {
+                await runQuery('ROLLBACK');
+                return res.status(400).json({ error: 'Item already returned' });
+            }
+
+            await runQuery('COMMIT');
+            
+            const updatedItem = await getOne('SELECT * FROM borrowed_items WHERE id = ?', [id]);
+            res.json(updatedItem);
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error returning item:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Categories endpoints
 app.get('/api/categories', async (req, res) => {
     try {
@@ -124,7 +285,7 @@ app.get('/api/items', async (req, res) => {
 });
 
 app.post('/api/items', async (req, res) => {
-    const { name, category, status, availability } = req.body;
+    const { name, category, status, availability, quantity } = req.body;
 
     // Validate required fields
     if (!name) {
@@ -142,18 +303,18 @@ app.post('/api/items', async (req, res) => {
             // Generate custom ID
             const productId = await generateItemId();
 
-            // Insert item with custom ID
+            // Insert item with custom ID (now including quantity)
             await runQuery(
-                `INSERT INTO items (product_id, name, category, status, availability) 
-                 VALUES (?, ?, ?, ?, ?)`,
-                [productId, name, category || null, status || null, availability || null]
+                `INSERT INTO items (product_id, name, category, status, availability, quantity) 
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [productId, name, category || null, status || null, availability || null, parseInt(quantity) || 0]
             );
 
             // Log activity
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (datetime('now'), ?, ?)`,
-                ['add_item', `Added new item: ${name}`]
+                ['add_item', `Added new item: ${name} with quantity: ${quantity || 0}`]
             );
 
             await runQuery('COMMIT');
@@ -196,7 +357,7 @@ app.get('/api/items/:id', async (req, res) => {
 
 app.put('/api/items/:id', async (req, res) => {
     const itemId = req.params.id;
-    const { name, category, status, availability } = req.body;
+    const { name, category, status, availability, quantity } = req.body;
 
     if (!name) {
         return res.status(400).json({ 
@@ -211,15 +372,15 @@ app.put('/api/items/:id', async (req, res) => {
         try {
             await runQuery(
                 `UPDATE items 
-                 SET name = ?, category = ?, status = ?, availability = ?
+                 SET name = ?, category = ?, status = ?, availability = ?, quantity = ?
                  WHERE product_id = ?`,
-                [name, category || null, status || null, availability || null, itemId]
+                [name, category || null, status || null, availability || null, parseInt(quantity) || 0, itemId]
             );
 
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (datetime('now'), ?, ?)`,
-                ['update_item', `Updated item: ${name}`]
+                ['update_item', `Updated item: ${name} with quantity: ${quantity || 0}`]
             );
 
             await runQuery('COMMIT');
@@ -398,11 +559,40 @@ async function initializeNotesTable() {
     }
 }
 
+// Initialize borrowed_items table
+async function initializeBorrowedItemsTable() {
+    try {
+        console.log('Initializing borrowed_items table...'); // Debug log
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS borrowed_items (
+                id TEXT PRIMARY KEY,
+                item_id TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                category TEXT,
+                quantity INTEGER NOT NULL,
+                borrower_name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                borrow_date TEXT NOT NULL,
+                due_date TEXT NOT NULL,
+                return_date TEXT,
+                status TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (item_id) REFERENCES items(product_id)
+            )
+        `);
+        console.log('Borrowed items table initialized successfully');
+    } catch (err) {
+        console.error('Error initializing borrowed items table:', err);
+        throw err;
+    }
+}
+
 // Initialize tables sequentially to avoid transaction conflicts
 async function initializeTables() {
     try {
         await initializeNotesTable();
         await initializeActivityLogTable();
+        await initializeBorrowedItemsTable();
         await initializeDefaultUsers();
         console.log('All tables initialized successfully');
     } catch (err) {
@@ -999,7 +1189,7 @@ app.get('/inventory', async (req, res) => {
 app.post('/inventory/add', async (req, res) => {
     try {
         console.log('Adding item:', req.body);
-        const { name, category, status, availability } = req.body;
+        const { name, category, status, availability, quantity } = req.body;
         
         if (!name || name.trim() === '') {
             console.log('Item name is missing');
@@ -1011,16 +1201,16 @@ app.post('/inventory/add', async (req, res) => {
         try {
             // Insert the item
             const result = await runQuery(
-                `INSERT INTO items (name, category, status, availability) 
-                 VALUES (?, ?, ?, ?)`,
-                [name.trim(), category?.trim(), status?.trim(), availability?.trim()]
+                `INSERT INTO items (name, category, status, availability, quantity) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [name.trim(), category?.trim(), status?.trim(), availability?.trim(), parseInt(quantity) || 0]
             );
 
             // Log the activity
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (?, ?, ?)`,
-                [new Date().toISOString(), 'add_item', `Added item: ${name}`]
+                [new Date().toISOString(), 'add_item', `Added item: ${name} with quantity: ${quantity || 0}`]
             );
 
             await runQuery('COMMIT');
@@ -1078,7 +1268,7 @@ app.post('/inventory/delete/:id', async (req, res) => {
 // Handle inventory update
 app.post('/inventory/update/:id', async (req, res) => {
     try {
-        const { name, category, status, availability } = req.body;
+        const { name, category, status, availability, quantity } = req.body;
         const itemId = req.params.id;
 
         if (!name) {
@@ -1091,16 +1281,16 @@ app.post('/inventory/update/:id', async (req, res) => {
             // Update the item
             await runQuery(
                 `UPDATE items 
-                 SET name = ?, category = ?, status = ?, availability = ?
+                 SET name = ?, category = ?, status = ?, availability = ?, quantity = ?
                  WHERE product_id = ?`,
-                [name, category, status, availability, itemId]
+                [name, category, status, availability, parseInt(quantity) || 0, itemId]
             );
 
             // Log the activity
             await runQuery(
                 `INSERT INTO activity_log (timestamp, action, details) 
                  VALUES (?, ?, ?)`,
-                [new Date().toISOString(), 'update_item', `Updated item: ${name}`]
+                [new Date().toISOString(), 'update_item', `Updated item: ${name} with quantity: ${quantity || 0}`]
             );
 
             await runQuery('COMMIT');

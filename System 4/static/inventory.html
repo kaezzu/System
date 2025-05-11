@@ -16,6 +16,41 @@
             background: #fff;
             transition: box-shadow 0.2s;
         }
+        
+        /* Toast notification styles */
+        .toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 50;
+            pointer-events: none;
+        }
+        
+        .toast {
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
     </style>
     <script>
         // Make functions globally available
@@ -84,7 +119,47 @@
             };
 
             window.showNotification = function(message, type = 'success') {
-                alert(message); // Simple alert for now
+                const toastContainer = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                
+                // Set toast classes based on notification type
+                const baseClasses = "toast shadow-lg rounded-md p-4 mb-3 flex items-center max-w-md";
+                const typeClasses = type === 'success' 
+                    ? "bg-green-600 text-white border-l-4 border-green-800"
+                    : "bg-red-100 border-l-4 border-red-500 text-red-700";
+                
+                toast.className = `${baseClasses} ${typeClasses}`;
+                
+                // Set icon based on notification type
+                const icon = type === 'success'
+                    ? '<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+                    : '<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+                
+                toast.innerHTML = `
+                    ${icon}
+                    <div class="flex-1 font-medium">${message}</div>
+                    <button class="ml-auto focus:outline-none ${type === 'success' ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}" onclick="this.parentElement.remove()">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                `;
+                
+                // Add toast to container
+                toastContainer.appendChild(toast);
+                
+                // Show toast with animation
+                setTimeout(() => {
+                    toast.classList.add('show');
+                }, 10);
+                
+                // Auto-remove toast after 5 seconds
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    setTimeout(() => {
+                        toast.remove();
+                    }, 300); // Wait for fade-out animation
+                }, 5000);
             };
 
             window.showQuantityModal = function(id, name, currentQuantity) {
@@ -147,7 +222,11 @@
                         throw new Error(data.error || 'Failed to update quantity');
                     }
                     
-                    showNotification(data.message);
+                    // Create a detailed success message for quantity update
+                    const itemName = document.querySelector('#quantityModal h2').textContent.replace('Manage Quantity: ', '');
+                    const successMsg = `${action === 'add' ? 'Added' : 'Removed'} ${amount} units ${action === 'add' ? 'to' : 'from'} "${itemName}". New quantity: ${data.newQuantity}`;
+                    
+                    showNotification(successMsg);
                     closeQuantityModal();
                     loadItems();
                 } catch (error) {
@@ -273,7 +352,12 @@
                         throw new Error(data.error || `Failed to ${isEdit ? 'update' : 'add'} item`);
                     }
                     
-                    showNotification(`Item ${isEdit ? 'updated' : 'added'} successfully`);
+                    // Create a more detailed success message
+                    const successMsg = isEdit 
+                        ? `Item "${itemData.name}" updated successfully with quantity: ${itemData.quantity}`
+                        : `Item "${itemData.name}" added successfully with quantity: ${itemData.quantity}`;
+                    
+                    showNotification(successMsg);
                     closeModal();
                     loadItems();
 
@@ -355,6 +439,9 @@
             window.location.href = 'index.html';
         }
     </script>
+
+    <!-- Toast container for notifications -->
+    <div id="toastContainer" class="toast-container"></div>
 
     <div class="flex h-screen">
         <!-- Sidebar -->

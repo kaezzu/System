@@ -15,6 +15,41 @@
             background: #fff;
             transition: box-shadow 0.2s;
         }
+        
+        /* Toast notification styles */
+        .toast-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 50;
+            pointer-events: none;
+        }
+        
+        .toast {
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+            }
+            70% {
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
@@ -24,6 +59,9 @@
             window.location.href = 'index.html';
         }
     </script>
+
+    <!-- Toast container for notifications -->
+    <div id="toastContainer" class="toast-container"></div>
 
     <div class="flex h-screen">
         <!-- Sidebar -->
@@ -106,7 +144,6 @@
                         <img src="img/school_logo.png" alt="School Logo" class="h-10">
                         <h1 class="text-xl font-semibold text-secondary-900">Borrowed Items</h1>
                     </div>
-            
                 </div>
             </header>
 
@@ -163,11 +200,15 @@
     </div>
 
     <!-- Borrow Item Modal -->
-    <div id="borrowModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
-        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+    <div id="borrowModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-auto transform transition-all">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-xl font-semibold text-secondary-900">Borrow Item</h2>
-                <button onclick="closeBorrowModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
+                <button onclick="closeBorrowModal()" class="bg-gray-200 text-gray-800 hover:bg-gray-300 rounded-full p-2 flex items-center justify-center" title="Close">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
             </div>
             <form id="borrowForm" onsubmit="handleBorrowSubmit(event)" class="space-y-4">
                 <div>
@@ -190,16 +231,285 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-secondary-700 mb-1">Due Date</label>
-                    <input type="date" id="dueDate" class="input-field" required>
+                    <div class="flex items-center space-x-2">
+                        <input type="date" id="dueDate" class="input-field flex-1" disabled required>
+                        <button type="button" id="toggleDueDate" class="text-primary-600 hover:text-primary-700 text-sm underline focus:outline-none">
+                            Change manually
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="w-full btn-primary">Borrow Item</button>
+                <div class="mt-2 text-center">
+                    <button type="button" onclick="closeBorrowModal()" class="text-sm text-gray-600 hover:text-gray-900">
+                        Cancel
+                    </button>
+                </div>
             </form>
         </div>
     </div>
 
     <script src="shared.js"></script>
-    <script src="borrowed.js"></script>
     <script>
+
+        // DOM Elements
+        const borrowModal = document.getElementById('borrowModal');
+        const borrowForm = document.getElementById('borrowForm');
+        const searchInput = document.getElementById('searchInput');
+        const statusFilter = document.getElementById('statusFilter');
+        const borrowedTableBody = document.getElementById('borrowedTableBody');
+        const borrowItemSelect = document.getElementById('borrowItem');
+        const dueDateInput = document.getElementById('dueDate');
+        const toggleDueDateBtn = document.getElementById('toggleDueDate');
+
+        // Function to update available items in the borrow select
+        async function updateAvailableItems() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/items`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to fetch items');
+                }
+
+                borrowItemSelect.innerHTML = '<option value="">Select Item</option>';
+                
+                if (!data.items || data.items.length === 0) {
+                    console.log('No items found');
+                    return;
+                }
+                
+                data.items.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.product_id;
+                    option.textContent = `${item.name} (Available: ${item.quantity || 0})`;
+                    option.dataset.maxQuantity = item.quantity || 0;
+                    option.dataset.category = item.category || '';
+                    borrowItemSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading items:', error);
+                showNotification('Error loading items: ' + error.message, 'error');
+            }
+        }
+
+        // Function to show borrow modal
+        async function showBorrowItemModal() {
+            await updateAvailableItems();
+            borrowForm.reset();
+            borrowModal.classList.remove('hidden');
+            borrowModal.classList.add('flex');
+            setDefaultDueDate();
+        }
+
+        // Function to close borrow modal
+        function closeBorrowModal() {
+            borrowModal.classList.add('hidden');
+            borrowModal.classList.remove('flex');
+            borrowForm.reset();
+            dueDateInput.disabled = true;
+        }
+
+        // Function to set default due date (1 year from now)
+        function setDefaultDueDate() {
+            const date = new Date();
+            date.setFullYear(date.getFullYear() + 1);
+            dueDateInput.value = date.toISOString().split('T')[0];
+        }
+
+        // Function to toggle due date input
+        function toggleDueDateInput() {
+            dueDateInput.disabled = !dueDateInput.disabled;
+            if (!dueDateInput.disabled) {
+                dueDateInput.focus();
+            }
+        }
+
+        // Function to handle borrow submission
+        async function handleBorrowSubmit(event) {
+            event.preventDefault();
+            
+            const itemId = document.getElementById('borrowItem').value;
+            const quantity = parseInt(document.getElementById('borrowQuantity').value);
+            const borrowerName = document.getElementById('borrowerName').value;
+            const department = document.getElementById('department').value;
+            const dueDate = document.getElementById('dueDate').value;
+            
+            // Validate inputs
+            if (!itemId || !quantity || !borrowerName || !department || !dueDate) {
+                showNotification('Please fill in all fields', 'error');
+                return;
+            }
+
+            // Get the selected option to access item details
+            const selectedOption = borrowItemSelect.options[borrowItemSelect.selectedIndex];
+            const maxQuantity = parseInt(selectedOption.dataset.maxQuantity);
+            
+            // Check if quantity is available
+            if (quantity > maxQuantity) {
+                showNotification('Requested quantity is not available', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/borrowed-items`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        item_id: itemId,
+                        item_name: selectedOption.textContent.split(' (')[0],
+                        category: selectedOption.dataset.category,
+                        quantity,
+                        borrower_name: borrowerName,
+                        department,
+                        due_date: dueDate
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to borrow item');
+                }
+
+                // Show success message
+                showNotification('Item borrowed successfully!', 'success');
+                
+                // Update the table
+                await loadBorrowedItems();
+                
+                // Close modal
+                closeBorrowModal();
+            } catch (error) {
+                console.error('Error borrowing item:', error);
+                showNotification(error.message || 'Error borrowing item', 'error');
+            }
+        }
+
+        // Function to load borrowed items
+        async function loadBorrowedItems() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/borrowed-items`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const items = await response.json();
+                
+                borrowedTableBody.innerHTML = '';
+                
+                items.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">${item.item_name || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.category || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.quantity || 0}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.borrower_name || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.department || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.borrow_date || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${item.due_date || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClass(item.status)}">
+                                ${item.status || 'Unknown'}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            ${item.status === 'Borrowed' ? `
+                                <button onclick="returnItem('${item.id}')" class="text-primary-600 hover:text-primary-900">
+                                    Return
+                                </button>
+                            ` : ''}
+                        </td>
+                    `;
+                    borrowedTableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading borrowed items:', error);
+                showNotification('Error loading borrowed items: ' + error.message, 'error');
+            }
+        }
+
+        // Function to return an item
+        async function returnItem(itemId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/borrowed-items/${itemId}/return`, {
+                    method: 'PUT'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to return item');
+                }
+
+                showNotification('Item returned successfully', 'success');
+                await loadBorrowedItems();
+            } catch (error) {
+                console.error('Error returning item:', error);
+                showNotification('Error returning item: ' + error.message, 'error');
+            }
+        }
+
+        // Function to get status class for styling
+        function getStatusClass(status) {
+            switch(status) {
+                case 'Borrowed':
+                    return 'bg-yellow-100 text-yellow-800';
+                case 'Returned':
+                    return 'bg-green-100 text-green-800';
+                case 'Past Due':
+                    return 'bg-red-100 text-red-800';
+                default:
+                    return 'bg-gray-100 text-gray-800';
+            }
+        }
+
+        // Function to show notification
+        function showNotification(message, type = 'success') {
+            const toastContainer = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            // Set toast classes based on notification type
+            const baseClasses = "toast shadow-lg rounded-md p-4 mb-3 flex items-center max-w-md";
+            const typeClasses = type === 'success' 
+                ? "bg-green-600 text-white border-l-4 border-green-800"
+                : "bg-red-100 border-l-4 border-red-500 text-red-700";
+            
+            toast.className = `${baseClasses} ${typeClasses}`;
+            
+            // Set icon based on notification type
+            const icon = type === 'success'
+                ? '<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+                : '<svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+            
+            toast.innerHTML = `
+                ${icon}
+                <div class="flex-1 font-medium">${message}</div>
+                <button class="ml-auto focus:outline-none ${type === 'success' ? 'text-white hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}" onclick="this.parentElement.remove()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            `;
+            
+            // Add toast to container
+            toastContainer.appendChild(toast);
+            
+            // Show toast with animation
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            // Auto-remove toast after 5 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300); // Wait for fade-out animation
+            }, 5000);
+        }
+
         // Function to format role text
         function formatRole(role) {
             switch(role) {
@@ -229,9 +539,29 @@
             }
         }
 
+        // Function to handle backdrop click to close modal
+        function handleModalBackdropClick(event) {
+            // Close the modal only if the click was directly on the backdrop
+            if (event.target === borrowModal) {
+                closeBorrowModal();
+            }
+        }
+
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             updateUserInfo();
+            loadBorrowedItems();
+            toggleDueDateBtn.addEventListener('click', toggleDueDateInput);
+            
+            // Add keyboard listener for ESC key to close modal
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' && !borrowModal.classList.contains('hidden')) {
+                    closeBorrowModal();
+                }
+            });
+            
+            // Add click event listener to the modal backdrop
+            borrowModal.addEventListener('click', handleModalBackdropClick);
         });
 
         // Sticky header on scroll
