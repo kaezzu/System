@@ -706,7 +706,10 @@
         // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             updateUserInfo();
-            
+            displayRecentActivities();
+            displayRecentNotifications();
+            displayRecentNotes();
+            setInterval(displayRecentNotifications, 1000);
             // Handle role-specific layout and content
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
             if (currentUser) {
@@ -718,19 +721,13 @@
                         quickActionsGrid.classList.remove('lg:grid-cols-4');
                         quickActionsGrid.classList.add('lg:grid-cols-2');
                     }
-                    
                     // Hide Notes and Supplier links for members
                     const notesLink = document.querySelector('.notes-link');
                     const supplierLink = document.querySelector('.supplier-link');
-                    
                     if (notesLink) notesLink.style.display = 'none';
                     if (supplierLink) supplierLink.style.display = 'none';
                 }
             }
-            
-            displayRecentActivities();
-            displayRecentNotifications();
-            displayRecentNotes();
         });
 
         function showNotification(message, type = 'success') {

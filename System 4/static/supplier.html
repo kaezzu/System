@@ -325,6 +325,11 @@
                     closeModal();
                 }
             });
+
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('input', searchSuppliers);
+            }
         });
 
         // Fetch and display suppliers
@@ -348,7 +353,7 @@
                 }
 
                 suppliers = data.suppliers || [];
-                displaySuppliers();
+                displaySuppliers(suppliers);
             } catch (error) {
                 console.error('Error:', error);
                 const tableBody = document.getElementById('supplierTableBody');
@@ -363,8 +368,8 @@
             }
         }
 
-        // Display suppliers in table
-        function displaySuppliers() {
+        // Display suppliers in table (accepts an array)
+        function displaySuppliers(suppliersToDisplay = suppliers) {
             const tableBody = document.getElementById('supplierTableBody');
             tableBody.innerHTML = '';
 
@@ -372,7 +377,7 @@
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
             const isLogisticOfficer = currentUser && currentUser.role === 'logistic_officer';
 
-            if (suppliers.length === 0) {
+            if (suppliersToDisplay.length === 0) {
                 tableBody.innerHTML = `
                     <tr>
                         <td colspan="6" class="px-6 py-4 text-center text-gray-500">
@@ -389,7 +394,7 @@
                 return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
             }
 
-            suppliers.forEach(supplier => {
+            suppliersToDisplay.forEach(supplier => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50';
                 row.innerHTML = `
@@ -424,13 +429,15 @@
             });
         }
 
-        // Search suppliers
+        // Search suppliers (client-side)
         function searchSuppliers() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const searchInputValue = document.getElementById('searchInput').value.toLowerCase();
             const filteredSuppliers = suppliers.filter(supplier => 
-                supplier.name.toLowerCase().includes(searchInput) ||
-                supplier.contact.toLowerCase().includes(searchInput) ||
-                supplier.email.toLowerCase().includes(searchInput)
+                (supplier.name && supplier.name.toLowerCase().includes(searchInputValue)) ||
+                (supplier.contact && supplier.contact.toLowerCase().includes(searchInputValue)) ||
+                (supplier.email && supplier.email.toLowerCase().includes(searchInputValue)) ||
+                (supplier.phone && supplier.phone.toLowerCase().includes(searchInputValue)) ||
+                (supplier.address && supplier.address.toLowerCase().includes(searchInputValue))
             );
             displaySuppliers(filteredSuppliers);
         }

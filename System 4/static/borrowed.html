@@ -261,6 +261,9 @@
         const dueDateInput = document.getElementById('dueDate');
         const toggleDueDateBtn = document.getElementById('toggleDueDate');
 
+        // Global array to store all borrowed items
+        window.allBorrowedItems = [];
+
         // Function to update available items in the borrow select
         async function updateAvailableItems() {
             try {
@@ -405,71 +408,107 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const items = await response.json();
-                
-                borrowedTableBody.innerHTML = '';
-                
-                // Get current user role
-                const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-                const isMember = currentUser && currentUser.role === 'member';
-                
-                items.forEach(item => {
-                    const row = document.createElement('tr');
-                    
-                    // Base row HTML
-                    row.innerHTML = `
-                        <td class="px-6 py-4 whitespace-nowrap">${item.item_name || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">${item.category || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">${item.quantity || 0}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">${item.borrower_name || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">${item.department || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">${item.borrow_date || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">${item.due_date || 'N/A'}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClass(item.status)}">
-                                ${item.status || 'Unknown'}
-                            </span>
-                        </td>
-                    `;
-                    
-                    // Add action buttons cell
-                    const actionsCell = document.createElement('td');
-                    actionsCell.className = "px-6 py-4 whitespace-nowrap text-right text-sm font-medium";
-                    
-                    if (!isMember) {
-                        if (item.status === 'Borrowed') {
-                            // Return button with box-arrow-in icon for borrowed items
-                            actionsCell.innerHTML = `
-                                <button onclick="returnItem('${item.id}')" 
-                                    class="inline-flex items-center justify-center px-2 py-1.5 border border-primary-600 text-primary-600 hover:bg-primary-50 rounded-md transition-colors duration-150"
-                                    title="Return Item">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7" />
-                                    </svg>
-                                </button>
-                            `;
-                        } else {
-                            // Disabled button for already returned items
-                            actionsCell.innerHTML = `
-                                <button disabled
-                                    class="inline-flex items-center justify-center px-2 py-1.5 border border-gray-300 text-gray-400 bg-gray-100 rounded-md cursor-not-allowed"
-                                    title="Already Returned">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                    </svg>
-                                </button>
-                            `;
-                        }
-                    } else {
-                        actionsCell.innerHTML = '<span class="text-gray-400">No actions available</span>';
-                    }
-                    
-                    row.appendChild(actionsCell);
-                    borrowedTableBody.appendChild(row);
-                });
+                window.allBorrowedItems = items; // Store all items globally
+                displayBorrowedItems(window.allBorrowedItems);
             } catch (error) {
                 console.error('Error loading borrowed items:', error);
                 showNotification('Error loading borrowed items: ' + error.message, 'error');
             }
+        }
+
+        // Function to filter borrowed items by search term
+        function filterBorrowedItems(searchTerm) {
+            searchTerm = searchTerm.toLowerCase();
+            return window.allBorrowedItems.filter(item =>
+                (item.item_name && item.item_name.toLowerCase().includes(searchTerm)) ||
+                (item.category && item.category.toLowerCase().includes(searchTerm)) ||
+                (item.borrower_name && item.borrower_name.toLowerCase().includes(searchTerm)) ||
+                (item.department && item.department.toLowerCase().includes(searchTerm))
+            );
+        }
+
+        // Function to display borrowed items in the table
+        function displayBorrowedItems(items) {
+            borrowedTableBody.innerHTML = '';
+            // Get current user role
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            const isMember = currentUser && currentUser.role === 'member';
+            items.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">${item.item_name || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.category || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.quantity || 0}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.borrower_name || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.department || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.borrow_date || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${item.due_date || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusClass(item.status)}">
+                            ${item.status || 'Unknown'}
+                        </span>
+                    </td>
+                `;
+                // Add action buttons cell
+                const actionsCell = document.createElement('td');
+                actionsCell.className = "px-6 py-4 whitespace-nowrap text-right text-sm font-medium";
+                if (!isMember) {
+                    if (item.status === 'Borrowed') {
+                        actionsCell.innerHTML = `
+                            <button onclick="returnItem('${item.id}')" 
+                                class="inline-flex items-center justify-center px-2 py-1.5 border border-primary-600 text-primary-600 hover:bg-primary-50 rounded-md transition-colors duration-150"
+                                title="Return Item">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 11l7-7 7 7M5 19l7-7 7 7" />
+                                </svg>
+                            </button>
+                        `;
+                    } else {
+                        actionsCell.innerHTML = `
+                            <button disabled
+                                class="inline-flex items-center justify-center px-2 py-1.5 border border-gray-300 text-gray-400 bg-gray-100 rounded-md cursor-not-allowed"
+                                title="Already Returned">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                            </button>
+                        `;
+                    }
+                } else {
+                    actionsCell.innerHTML = '<span class="text-gray-400">No actions available</span>';
+                }
+                row.appendChild(actionsCell);
+                borrowedTableBody.appendChild(row);
+            });
+        }
+
+        // Add search functionality (client-side)
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce((e) => {
+                const value = e.target.value.trim();
+                if (!value) {
+                    displayBorrowedItems(window.allBorrowedItems);
+                    return;
+                }
+                const filtered = filterBorrowedItems(value);
+                displayBorrowedItems(filtered);
+                if (filtered.length === 0) {
+                    showNotification('No borrowed items found matching your search.', 'error');
+                }
+            }, 300));
+        }
+
+        // Helper function to debounce search input
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
         }
 
         // Function to return an item

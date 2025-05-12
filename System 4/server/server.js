@@ -1416,10 +1416,9 @@ app.delete('/api/suppliers/:id', async (req, res) => {
 });
 
 // Search endpoint
-app.get('/api/inventory/search', async (req, res) => {
+app.get('/api/items/search', async (req, res) => {
     try {
         const { query, category, status, availability } = req.query;
-        
         let sql = `
             SELECT i.*, s.name as supplier_name, c.name as category_name,
                    n.content as notes, n.priority
@@ -1430,29 +1429,24 @@ app.get('/api/inventory/search', async (req, res) => {
             WHERE 1=1
         `;
         const params = [];
-        
         if (query) {
             sql += ` AND (i.name LIKE ? OR i.product_id LIKE ?)`;
             params.push(`%${query}%`, `%${query}%`);
         }
-        
         if (category) {
             sql += ` AND i.category = ?`;
             params.push(category);
         }
-        
         if (status) {
             sql += ` AND i.status = ?`;
             params.push(status);
         }
-        
         if (availability) {
             sql += ` AND i.availability = ?`;
             params.push(availability);
         }
-        
         const items = await getAll(sql, params);
-        res.json(items);
+        res.json(Array.isArray(items) ? items : []);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1882,10 +1876,7 @@ app.get('/api/recent-activities', async (req, res) => {
 });
 
 // Move catch-all route to the end
-app.get('*', (req, res) => {
-    const indexPath = path.join(__dirname, '..', 'static', 'index.html');
-    res.sendFile(indexPath);
-});
+
 
 // Start the server
 app.listen(port, () => {
@@ -1893,15 +1884,7 @@ app.listen(port, () => {
     console.log('Press Ctrl+C to stop');
 });
 
-app.get('/api/inventory', async (req, res) => {
-    try {
-        const items = await getAll('SELECT * FROM items ORDER BY product_id DESC');
-        res.setHeader('Content-Type', 'application/json');
-        res.json({ success: true, items });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
+
 
 // Debug endpoint to reinitialize tables
 app.get('/debug/reinitialize-tables', async (req, res) => {
@@ -2044,4 +2027,9 @@ app.get('/api/notifications/resolved', async (req, res) => {
         console.error('Error fetching resolved notifications:', err);
         res.status(500).json({ success: false, error: err.message });
     }
+});
+
+app.get('*', (req, res) => {
+    const indexPath = path.join(__dirname, '..', 'static', 'index.html');
+    res.sendFile(indexPath);
 });

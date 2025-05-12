@@ -433,28 +433,59 @@
             setTimeout(() => messageDiv.remove(), 3000);
         }
 
-        // Fetch notes and display in table
-        async function fetchNotes() {
-            try {
-                const response = await fetch('/api/notes');
-                const data = await response.json();
-                if (!data.success) throw new Error(data.error || 'Failed to fetch notes');
-                notes = data.notes;
-                displayNotesTable();
-            } catch (error) {
-                document.getElementById('notesTableBody').innerHTML = `<tr><td colspan="5" class="text-center text-red-500">${error.message}</td></tr>`;
+        // Function to filter and sort notes client-side
+        function filterAndDisplayNotes() {
+            let filtered = notes.slice();
+            const searchValue = document.getElementById('searchInput').value.trim().toLowerCase();
+            const filterValue = document.getElementById('filterSelect').value;
+            const sortValue = document.getElementById('sortSelect').value;
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+
+            // Filter by search
+            if (searchValue) {
+                filtered = filtered.filter(note =>
+                    (note.title && note.title.toLowerCase().includes(searchValue)) ||
+                    (note.content && note.content.toLowerCase().includes(searchValue)) ||
+                    (note.category && note.category.toLowerCase().includes(searchValue)) ||
+                    (note.priority && note.priority.toLowerCase().includes(searchValue)) ||
+                    (note.author_name && note.author_name.toLowerCase().includes(searchValue)) ||
+                    (note.username && note.username.toLowerCase().includes(searchValue))
+                );
             }
+
+            // Filter by category/ownership
+            if (filterValue === 'my' && currentUser) {
+                filtered = filtered.filter(note => note.user_id === currentUser.id);
+            } else if (filterValue === 'others' && currentUser) {
+                filtered = filtered.filter(note => note.user_id !== currentUser.id);
+            } else if (filterValue && filterValue !== 'my' && filterValue !== 'others') {
+                filtered = filtered.filter(note => note.category === filterValue);
+            }
+
+            // Sort
+            if (sortValue === 'newest') {
+                filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            } else if (sortValue === 'oldest') {
+                filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            } else if (sortValue === 'priority') {
+                const priorityOrder = { high: 1, medium: 2, low: 3 };
+                filtered.sort((a, b) => (priorityOrder[a.priority] || 4) - (priorityOrder[b.priority] || 4));
+            } else if (sortValue === 'title') {
+                filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+            }
+
+            displayNotesTable(filtered);
         }
 
-        // Display notes in table
-        function displayNotesTable() {
+        // Display notes in table (accepts an array)
+        function displayNotesTable(filteredNotes = notes) {
             const tbody = document.getElementById('notesTableBody');
-            if (!notes.length) {
+            if (!filteredNotes.length) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">No notes found</td></tr>';
                 return;
             }
-            tbody.innerHTML = notes.map((note, i) => `
-                <tr onclick="if(event.target.type!=='checkbox'){showNoteInfoModal(${i})}" style="cursor:pointer;">
+            tbody.innerHTML = filteredNotes.map((note, i) => `
+                <tr onclick="if(event.target.type!=='checkbox'){showNoteInfoModal(${notes.indexOf(note)})}" style="cursor:pointer;">
                     <td><input type="checkbox" class="note-checkbox" data-note-id="${note.note_id}" onclick="event.stopPropagation(); updateDeleteNotesBtnState()"></td>
                     <td>${note.title}</td>
                     <td>${note.category ? note.category.charAt(0).toUpperCase() + note.category.slice(1) : 'General'}</td>
@@ -638,11 +669,27 @@
             }
         }
 
-        // Initialize
+        // Attach event listeners for search, filter, and sort
         document.addEventListener('DOMContentLoaded', function() {
             updateUserInfo();
             fetchNotes();
+            document.getElementById('searchInput').addEventListener('input', filterAndDisplayNotes);
+            document.getElementById('filterSelect').addEventListener('change', filterAndDisplayNotes);
+            document.getElementById('sortSelect').addEventListener('change', filterAndDisplayNotes);
         });
+
+        // Update fetchNotes to call filterAndDisplayNotes after loading
+        async function fetchNotes() {
+            try {
+                const response = await fetch('/api/notes');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to fetch notes');
+                notes = data.notes;
+                filterAndDisplayNotes();
+            } catch (error) {
+                document.getElementById('notesTableBody').innerHTML = `<tr><td colspan="5" class="text-center text-red-500">${error.message}</td></tr>`;
+            }
+        }
 
         // Sticky header on scroll
         document.addEventListener('DOMContentLoaded', function() {
