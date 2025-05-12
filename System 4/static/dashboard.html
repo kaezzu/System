@@ -304,7 +304,7 @@
                         <div class="mb-4 flex justify-center">
                             <!-- Document Text Icon -->
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
                             </svg>
                         </div>
                         <h3 class="text-lg font-semibold text-secondary-900 text-center">Notes</h3>
@@ -540,41 +540,55 @@
         }
 
         // Function to display recent notifications
-        function displayRecentNotifications() {
-            const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-            
-            // Sort notifications by timestamp in descending order (newest first)
-            notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            
-            const recentNotifications = notifications.slice(0, 5); // Get 5 most recent notifications
-            const container = document.getElementById('recentNotifications');
-            
-            if (recentNotifications.length === 0) {
-                container.innerHTML = '<div class="no-data">No notifications</div>';
-                return;
-            }
+        async function displayRecentNotifications() {
+            try {
+                // Fetch notifications from the server
+                const response = await fetch('/api/notifications');
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to fetch notifications');
+                const notifications = data.notifications || [];
+                // Sort and get the 2 most recent
+                notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                const recentNotifications = notifications.slice(0, 2);
 
-            container.innerHTML = recentNotifications.map(notification => `
-                <div class="notification-item ${notification.read ? 'read' : 'unread'}">
-                    <div class="notification-content">
-                        <div class="notification-header">
-                            <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
-                                                                                notification.type === 'out_of_stock' ? 'Out of Stock' : 
-                                                                                notification.type}</span>
-                            <span class="notification-time">${formatTimestamp(notification.timestamp)}</span>
+                const container = document.getElementById('recentNotifications');
+                if (recentNotifications.length === 0) {
+                    container.innerHTML = '<div class="no-data">No notifications</div>';
+                    return;
+                }
+
+                container.innerHTML = recentNotifications.map(notification => `
+                    <div class="bg-white rounded-lg shadow p-4 border border-gray-100 flex flex-col gap-2 hover:shadow-md transition-shadow notification-item ${notification.read ? 'read' : 'unread'}">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="notification-type ${notification.type} px-3 py-1 rounded-full text-xs font-semibold"
+                                style="background-color: ${notification.type === 'low_stock' ? '#feedd3' : notification.type === 'out_of_stock' ? '#fed7d7' : notification.type === 'near_expiration' ? '#feebc8' : notification.type === 'near_due_date' ? '#d1e9ff' : notification.type === 'system' ? '#e9d5ff' : notification.type === 'borrow' ? '#d1fae5' : notification.type === 'return' ? '#bfdbfe' : '#f3f4f6'}; color: ${notification.type === 'low_stock' ? '#c05621' : notification.type === 'out_of_stock' ? '#c53030' : notification.type === 'near_expiration' ? '#c05621' : notification.type === 'near_due_date' ? '#2b6cb0' : notification.type === 'system' ? '#6b46c1' : notification.type === 'borrow' ? '#065f46' : notification.type === 'return' ? '#1e40af' : '#374151'};">
+                                ${notification.type === 'low_stock' ? 'Low Stock' : 
+                                  notification.type === 'out_of_stock' ? 'Out of Stock' : 
+                                  notification.type === 'near_expiration' ? 'Near Expiration' :
+                                  notification.type === 'near_due_date' ? 'Near Due Date' :
+                                  notification.type.charAt(0).toUpperCase() + notification.type.slice(1)}
+                            </span>
+                            <span class="notification-time text-xs text-gray-500">${new Date(notification.timestamp).toLocaleString()}</span>
                         </div>
-                        <p class="notification-message">${notification.message}</p>
-                        ${notification.type === 'low_stock' || notification.type === 'out_of_stock' ? `
-                            <div class="notification-details">
-                                <p>Item: ${notification.details.itemName}</p>
-                                <p>Category: ${notification.details.category}</p>
-                                ${notification.type === 'low_stock' ? `<p>Current Quantity: ${notification.details.currentQuantity}</p>` : 
-                                                                      `<p>Status: Out of Stock</p>`}
+                        <div class="font-medium text-gray-800 notification-message">${notification.message}</div>
+                        ${(notification.type === 'low_stock' || notification.type === 'out_of_stock' || notification.type === 'near_expiration' || notification.type === 'near_due_date') ? `
+                            <div class="notification-details text-sm text-gray-600 mt-1">
+                                ${notification.details?.itemName ? `<div><span class='font-semibold'>Item:</span> ${notification.details.itemName}</div>` : ''}
+                                ${notification.details?.category ? `<div><span class='font-semibold'>Category:</span> ${notification.details.category}</div>` : ''}
+                                ${notification.type === 'low_stock' && notification.details?.currentQuantity ? `<div><span class='font-semibold'>Current Quantity:</span> ${notification.details.currentQuantity}</div>` : ''}
+                                ${notification.type === 'out_of_stock' ? `<div><span class='font-semibold'>Status:</span> Out of Stock</div>` : ''}
+                                ${notification.type === 'near_expiration' && notification.details?.expirationDate ? `<div><span class='font-semibold'>Expiration Date:</span> ${notification.details.expirationDate}</div>` : ''}
+                                ${notification.type === 'near_due_date' && notification.details?.dueDate ? `<div><span class='font-semibold'>Due Date:</span> ${notification.details.dueDate}</div>` : ''}
+                                ${notification.type === 'near_due_date' && notification.details?.borrower ? `<div><span class='font-semibold'>Borrower:</span> ${notification.details.borrower}</div>` : ''}
+                                ${notification.type === 'near_due_date' && notification.details?.department ? `<div><span class='font-semibold'>Department:</span> ${notification.details.department}</div>` : ''}
                             </div>
                         ` : ''}
                     </div>
-                </div>
-            `).join('');
+                `).join('');
+            } catch (error) {
+                const container = document.getElementById('recentNotifications');
+                container.innerHTML = `<div class="no-data">${error.message}</div>`;
+            }
         }
 
         // Function to display recent notes

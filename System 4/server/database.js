@@ -23,18 +23,6 @@ async function initializeDatabase() {
             name TEXT UNIQUE NOT NULL
         )`);
 
-        // Inventory items table
-        db.run(`CREATE TABLE IF NOT EXISTS inventory_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            category_id INTEGER,
-            quantity INTEGER NOT NULL,
-            status TEXT NOT NULL,
-            expiration TEXT,
-            quality TEXT,
-            last_updated TEXT NOT NULL,
-            FOREIGN KEY (category_id) REFERENCES categories(id)
-        )`);
         
         // Items table (ERD)
         db.run(`CREATE TABLE IF NOT EXISTS items (

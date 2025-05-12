@@ -185,7 +185,6 @@
         .input-field {
             border: 1px solid #d1d5db;
             border-radius: 6px;
-            padding: 8px 12px;
             font-size: 14px;
             width: 100%;
             transition: border-color 0.2s;
@@ -308,17 +307,24 @@
                             </div>
                             <input type="text" id="searchInput" placeholder="Search notifications..." 
                                 class="input-field pl-10">
+                            <div id="searchFeedback" class="hidden text-sm text-secondary-500 mt-1"></div>
                         </div>
-                        <select id="notificationFilter" class="input-field md:w-48">
-                            <option value="">All Types</option>
-                            <option value="system">System</option>
-                            <option value="low_stock">Low Stock</option>
-                            <option value="out_of_stock">Out of Stock</option>
-                            <option value="near_expiration">Near Expiration</option>
-                            <option value="near_due_date">Near Due Date</option>
-                            <option value="borrow">Borrow</option>
-                            <option value="return">Return</option>
-                        </select>
+                        <div class="relative">
+                            <select id="notificationFilter" class="input-field md:w-48 pr-8">
+                                <option value="">All Types</option>
+                                <option value="system">System</option>
+                                <option value="low_stock">Low Stock</option>
+                                <option value="out_of_stock">Out of Stock</option>
+                                <option value="near_expiration">Near Expiration</option>
+                                <option value="near_due_date">Near Due Date</option>
+                                <option value="borrow">Borrow</option>
+                                <option value="return">Return</option>
+                            </select>
+                            
+                        </div>
+                        <button id="clearFilters" class="text-sm text-primary-600 hover:text-primary-700 hidden">
+                            Clear Filters
+                        </button>
                     </div>
                 </div>
 
@@ -415,94 +421,165 @@
             }
         }
 
-        // Function to filter notifications
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Save filter state to localStorage
+        function saveFilterState() {
+            const searchTerm = document.getElementById('searchInput').value;
+            const filterType = document.getElementById('notificationFilter').value;
+            localStorage.setItem('notificationFilters', JSON.stringify({
+                searchTerm,
+                filterType
+            }));
+        }
+
+        // Load filter state from localStorage
+        function loadFilterState() {
+            const savedFilters = localStorage.getItem('notificationFilters');
+            if (savedFilters) {
+                const { searchTerm, filterType } = JSON.parse(savedFilters);
+                document.getElementById('searchInput').value = searchTerm;
+                document.getElementById('notificationFilter').value = filterType;
+            }
+        }
+
+        // Update filter UI
+        function updateFilterUI() {
+            const searchTerm = document.getElementById('searchInput').value;
+            const filterType = document.getElementById('notificationFilter').value;
+            const clearFiltersBtn = document.getElementById('clearFilters');
+            
+            if (searchTerm || filterType) {
+                clearFiltersBtn.classList.remove('hidden');
+            } else {
+                clearFiltersBtn.classList.add('hidden');
+            }
+        }
+
+        // Enhanced filter notifications function
         async function filterNotifications() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const filterType = document.getElementById('notificationFilter').value;
             const container = document.getElementById('notificationsList');
-            container.innerHTML = '';
+            const searchFeedback = document.getElementById('searchFeedback');
+            
+            container.innerHTML = '<div class="p-4 text-center text-secondary-500">Loading notifications...</div>';
             
             try {
-                // Fetch notifications from server
                 const allNotifications = await fetchNotifications();
                 
-                // Filter notifications
                 const filteredNotifications = allNotifications.filter(notification => {
-                    const matchesSearch = notification.message.toLowerCase().includes(searchTerm) || 
-                                        (notification.details.itemName && notification.details.itemName.toLowerCase().includes(searchTerm));
+                    // Enhanced search fields
+                    const searchFields = [
+                        notification.message,
+                        notification.details?.itemName,
+                        notification.details?.category,
+                        notification.details?.borrower,
+                        notification.details?.department,
+                        notification.type
+                    ].filter(Boolean).map(field => field.toLowerCase());
+                    
+                    const matchesSearch = searchTerm === '' || 
+                        searchFields.some(field => field.includes(searchTerm));
                     const matchesType = filterType === '' || notification.type === filterType;
+                    
                     return matchesSearch && matchesType;
                 });
 
                 if (filteredNotifications.length === 0) {
-                    container.innerHTML = '<div class="no-notifications">No notifications matching your filters</div>';
-                    return;
-                }
-
-                // Display filtered notifications
-                filteredNotifications.forEach(notification => {
-                    const notificationElement = document.createElement('div');
-                    notificationElement.className = `notification-item ${notification.read ? 'read' : 'unread'}`;
+                    container.innerHTML = `
+                        <div class="p-4 text-center text-secondary-500">
+                            No notifications found matching your search criteria
+                        </div>`;
+                    searchFeedback.textContent = `No results found for "${searchTerm}"`;
+                    searchFeedback.classList.remove('hidden');
+                } else {
+                    searchFeedback.classList.add('hidden');
+                    container.innerHTML = '';
                     
-                    let detailsHtml = '';
-                    if (notification.type === 'low_stock') {
-                        detailsHtml = `
-                            <div class="notification-details">
-                                <p>Item: ${notification.details.itemName}</p>
-                                <p>Current Quantity: ${notification.details.currentQuantity}</p>
-                                <p>Category: ${notification.details.category}</p>
-                            </div>
-                        `;
-                    } else if (notification.type === 'out_of_stock') {
-                        detailsHtml = `
-                            <div class="notification-details">
-                                <p>Item: ${notification.details.itemName}</p>
-                                <p>Category: ${notification.details.category}</p>
-                                <p>Status: Out of Stock</p>
-                            </div>
-                        `;
-                    } else if (notification.type === 'near_expiration') {
-                        detailsHtml = `
-                            <div class="notification-details">
-                                <p>Item: ${notification.details.itemName}</p>
-                                <p>Expiration Date: ${notification.details.expirationDate}</p>
-                                <p>Category: ${notification.details.category}</p>
-                            </div>
-                        `;
-                    } else if (notification.type === 'near_due_date') {
-                        detailsHtml = `
-                            <div class="notification-details">
-                                <p>Item: ${notification.details.itemName}</p>
-                                <p>Due Date: ${notification.details.dueDate}</p>
-                                <p>Borrower: ${notification.details.borrower}</p>
-                                <p>Department: ${notification.details.department}</p>
-                            </div>
-                        `;
-                    }
+                    filteredNotifications.forEach(notification => {
+                        const notificationElement = document.createElement('div');
+                        notificationElement.className = `notification-item ${notification.read ? 'read' : 'unread'}`;
+                        
+                        let detailsHtml = '';
+                        if (notification.type === 'low_stock') {
+                            detailsHtml = `
+                                <div class="notification-details">
+                                    <p>Item: ${notification.details.itemName}</p>
+                                    <p>Current Quantity: ${notification.details.currentQuantity}</p>
+                                    <p>Category: ${notification.details.category}</p>
+                                </div>
+                            `;
+                        } else if (notification.type === 'out_of_stock') {
+                            detailsHtml = `
+                                <div class="notification-details">
+                                    <p>Item: ${notification.details.itemName}</p>
+                                    <p>Category: ${notification.details.category}</p>
+                                    <p>Status: Out of Stock</p>
+                                </div>
+                            `;
+                        } else if (notification.type === 'near_expiration') {
+                            detailsHtml = `
+                                <div class="notification-details">
+                                    <p>Item: ${notification.details.itemName}</p>
+                                    <p>Expiration Date: ${notification.details.expirationDate}</p>
+                                    <p>Category: ${notification.details.category}</p>
+                                </div>
+                            `;
+                        } else if (notification.type === 'near_due_date') {
+                            detailsHtml = `
+                                <div class="notification-details">
+                                    <p>Item: ${notification.details.itemName}</p>
+                                    <p>Due Date: ${notification.details.dueDate}</p>
+                                    <p>Borrower: ${notification.details.borrower}</p>
+                                    <p>Department: ${notification.details.department}</p>
+                                </div>
+                            `;
+                        }
 
-                    notificationElement.innerHTML = `
-                        <div class="notification-content">
-                            <div class="notification-header">
-                                <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
-                                                                                    notification.type === 'out_of_stock' ? 'Out of Stock' : 
-                                                                                    notification.type === 'near_expiration' ? 'Near Expiration' :
-                                                                                    notification.type === 'near_due_date' ? 'Near Due Date' :
-                                                                                    notification.type}</span>
-                                <span class="notification-time">${new Date(notification.timestamp).toLocaleString()}</span>
+                        notificationElement.innerHTML = `
+                            <div class="notification-content">
+                                <div class="notification-header">
+                                    <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
+                                                                                        notification.type === 'out_of_stock' ? 'Out of Stock' : 
+                                                                                        notification.type === 'near_expiration' ? 'Near Expiration' :
+                                                                                        notification.type === 'near_due_date' ? 'Near Due Date' :
+                                                                                        notification.type}</span>
+                                    <span class="notification-time">${new Date(notification.timestamp).toLocaleString()}</span>
+                                </div>
+                                <p class="notification-message">${notification.message}</p>
+                                ${detailsHtml}
                             </div>
-                            <p class="notification-message">${notification.message}</p>
-                            ${detailsHtml}
-                        </div>
-                        <div class="notification-actions">
-                            ${!notification.read ? `<button onclick="markNotificationAsRead(${notification.id})" class="mark-read-button">Mark as Read</button>` : ''}
-                        </div>
-                    `;
+                            <div class="notification-actions">
+                                ${!notification.read ? `<button onclick="markNotificationAsRead(${notification.id})" class="mark-read-button">Mark as Read</button>` : ''}
+                            </div>
+                        `;
 
-                    container.appendChild(notificationElement);
-                });
+                        container.appendChild(notificationElement);
+                    });
+                }
+                
+                // Update filter state
+                saveFilterState();
+                updateFilterUI();
+                
             } catch (error) {
                 console.error('Error filtering notifications:', error);
-                container.innerHTML = '<div class="no-notifications">Error loading notifications</div>';
+                container.innerHTML = `
+                    <div class="p-4 text-center text-red-500">
+                        Error loading notifications. Please try again.
+                    </div>`;
             }
         }
 
@@ -516,8 +593,24 @@
             await filterNotifications();
         }
 
-        // Initialize notifications display
+        // Initialize with debounced search
         document.addEventListener('DOMContentLoaded', function() {
+            loadFilterState();
+            
+            const debouncedFilter = debounce(filterNotifications, 300);
+            
+            document.getElementById('searchInput').addEventListener('input', debouncedFilter);
+            document.getElementById('notificationFilter').addEventListener('change', filterNotifications);
+            
+            document.getElementById('clearFilters').addEventListener('click', function() {
+                document.getElementById('searchInput').value = '';
+                document.getElementById('notificationFilter').value = '';
+                filterNotifications();
+            });
+            
+            // Initial filter
+            filterNotifications();
+            
             // First load existing notifications
             displayNotifications();
             
@@ -529,10 +622,6 @@
             setInterval(() => {
                 refreshNotifications(true);
             }, autoRefreshInterval);
-            
-            // Add event listeners for search and filter
-            document.getElementById('searchInput').addEventListener('input', filterNotifications);
-            document.getElementById('notificationFilter').addEventListener('change', filterNotifications);
         });
 
         function logout() {
