@@ -15,6 +15,187 @@
             background: #fff;
             transition: box-shadow 0.2s;
         }
+        
+        .refresh-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 16px;
+            background-color: #f3f4f6;
+            color: #374151;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .refresh-button:hover {
+            background-color: #e5e7eb;
+        }
+        
+        .refresh-button.refreshing svg {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .refresh-success {
+            display: inline-block;
+            margin-left: 10px;
+            color: #047857;
+            font-size: 14px;
+            animation: fadeOut 2s forwards;
+        }
+        
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        
+        .notification-item {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            position: relative;
+        }
+        
+        .notification-item.unread {
+            background-color: #f0f7ff;
+        }
+        
+        .notification-content {
+            margin-right: 100px;
+        }
+        
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .notification-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .notification-type.low_stock {
+            background-color: #feedd3;
+            color: #c05621;
+        }
+        
+        .notification-type.out_of_stock {
+            background-color: #fed7d7;
+            color: #c53030;
+        }
+        
+        .notification-type.near_expiration {
+            background-color: #feebc8;
+            color: #c05621;
+        }
+        
+        .notification-type.near_due_date {
+            background-color: #d1e9ff;
+            color: #2b6cb0;
+        }
+        
+        .notification-type.system {
+            background-color: #e9d5ff;
+            color: #6b46c1;
+        }
+        
+        .notification-type.borrow {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        
+        .notification-type.return {
+            background-color: #bfdbfe;
+            color: #1e40af;
+        }
+        
+        .notification-time {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        .notification-message {
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        
+        .notification-details {
+            font-size: 13px;
+            color: #4b5563;
+            margin-bottom: 8px;
+        }
+        
+        .notification-details p {
+            margin: 2px 0;
+        }
+        
+        .notification-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .mark-read-button {
+            position: static;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: #4f46e5;
+            border: 1px solid #4f46e5;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .mark-read-button:hover {
+            background-color: #4f46e5;
+            color: white;
+        }
+        
+        .no-notifications {
+            padding: 24px;
+            text-align: center;
+            color: #6b7280;
+        }
+        
+        .error-message {
+            padding: 24px;
+            text-align: center;
+            color: #ef4444;
+        }
+        
+        /* Search and filter controls */
+        .input-field {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        
+        .input-field:focus {
+            border-color: #4f46e5;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+        }
     </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
@@ -131,19 +312,37 @@
                         <select id="notificationFilter" class="input-field md:w-48">
                             <option value="">All Types</option>
                             <option value="system">System</option>
-                            <option value="inventory">Inventory</option>
+                            <option value="low_stock">Low Stock</option>
+                            <option value="out_of_stock">Out of Stock</option>
+                            <option value="near_expiration">Near Expiration</option>
+                            <option value="near_due_date">Near Due Date</option>
                             <option value="borrow">Borrow</option>
                             <option value="return">Return</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- Notifications List -->
-                <div class="bg-white rounded-lg shadow overflow-hidden">
+                
+
+                <!-- Notifications Lists -->
+                <div id="activeTabContent" class="bg-white rounded-lg shadow overflow-hidden mb-4">
                     <div class="divide-y divide-secondary-200">
                         <div id="notificationsList" class="divide-y divide-secondary-200">
                             <!-- Notification items will be dynamically populated -->
                         </div>
+                    </div>
+                </div>
+                <!-- Refresh Button -->
+                <div class="flex flex-col items-center mb-4 mt-4">
+                    <button id="refreshButton" onclick="refreshNotifications()" class="refresh-button">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Refresh Notifications
+                    </button>
+                    <div class="text-xs text-center text-secondary-500 mt-4">
+                        <p>Notifications are automatically refreshed when you open this page and every 2 minutes</p>
+                        <p class="mt-1">Last refresh: <span id="lastRefreshTime">-</span></p>
                     </div>
                 </div>
             </main>
@@ -167,76 +366,173 @@
             }
         }
 
-        // Function to display notifications
-        function displayNotifications() {
-            const notifications = JSON.parse(localStorage.getItem('notifications')) || [];
-            const container = document.getElementById('notificationsList');
-            container.innerHTML = '';
-
-            if (notifications.length === 0) {
-                container.innerHTML = '<div class="no-notifications">No notifications available</div>';
-                return;
-            }
-
-            // Sort notifications by timestamp in descending order (newest first)
-            notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-            notifications.forEach(notification => {
-                const notificationElement = document.createElement('div');
-                notificationElement.className = `notification-item ${notification.read ? 'read' : 'unread'}`;
-                
-                let detailsHtml = '';
-                if (notification.type === 'low_stock') {
-                    detailsHtml = `
-                        <div class="notification-details">
-                            <p>Item: ${notification.details.itemName}</p>
-                            <p>Current Quantity: ${notification.details.currentQuantity}</p>
-                            <p>Category: ${notification.details.category}</p>
-                        </div>
-                    `;
-                } else if (notification.type === 'out_of_stock') {
-                    detailsHtml = `
-                        <div class="notification-details">
-                            <p>Item: ${notification.details.itemName}</p>
-                            <p>Category: ${notification.details.category}</p>
-                            <p>Status: Out of Stock</p>
-                        </div>
-                    `;
-                }
-
-                notificationElement.innerHTML = `
-                    <div class="notification-content">
-                        <div class="notification-header">
-                            <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
-                                                                                notification.type === 'out_of_stock' ? 'Out of Stock' : 
-                                                                                notification.type}</span>
-                            <span class="notification-time">${new Date(notification.timestamp).toLocaleString()}</span>
-                        </div>
-                        <p class="notification-message">${notification.message}</p>
-                        ${detailsHtml}
-                    </div>
-                    ${!notification.read ? `<button onclick="markNotificationAsRead(${notification.id})" class="mark-read-button">Mark as Read</button>` : ''}
-                `;
-
-                container.appendChild(notificationElement);
-            });
+        // Function to mark all notifications as read
+        function markAllAsRead() {
+            markAllNotificationsAsRead();
         }
 
-        // Function to update user info in sidebar
-        function updateUserInfo() {
-            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (currentUser) {
-                document.getElementById('sidebarUserName').textContent = currentUser.username;
-                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
-                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+        // Function to refresh notifications
+        async function refreshNotifications(isAutomatic = false) {
+            const refreshButton = document.getElementById('refreshButton');
+            const lastRefreshSpan = document.getElementById('lastRefreshTime');
+            
+            // Add spinning animation to the refresh button
+            refreshButton.classList.add('refreshing');
+            
+            try {
+                // Trigger server-side checks for new notifications
+                await checkServerNotifications();
+                
+                // Update the display
+                await displayNotifications();
+                
+                // Update last refresh time
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                lastRefreshSpan.textContent = timeString;
+                
+                // Only show success message if not automatic refresh
+                if (!isAutomatic) {
+                    // Show a temporary success message
+                    const successMessage = document.createElement('span');
+                    successMessage.textContent = 'Notifications refreshed';
+                    successMessage.className = 'refresh-success';
+                    refreshButton.parentNode.appendChild(successMessage);
+                    
+                    // Remove the success message after 2 seconds
+                    setTimeout(() => {
+                        if (successMessage.parentNode) {
+                            successMessage.parentNode.removeChild(successMessage);
+                        }
+                    }, 2000);
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing notifications:', error);
+            } finally {
+                // Remove spinning animation
+                refreshButton.classList.remove('refreshing');
             }
+        }
+
+        // Function to filter notifications
+        async function filterNotifications() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filterType = document.getElementById('notificationFilter').value;
+            const container = document.getElementById('notificationsList');
+            container.innerHTML = '';
+            
+            try {
+                // Fetch notifications from server
+                const allNotifications = await fetchNotifications();
+                
+                // Filter notifications
+                const filteredNotifications = allNotifications.filter(notification => {
+                    const matchesSearch = notification.message.toLowerCase().includes(searchTerm) || 
+                                        (notification.details.itemName && notification.details.itemName.toLowerCase().includes(searchTerm));
+                    const matchesType = filterType === '' || notification.type === filterType;
+                    return matchesSearch && matchesType;
+                });
+
+                if (filteredNotifications.length === 0) {
+                    container.innerHTML = '<div class="no-notifications">No notifications matching your filters</div>';
+                    return;
+                }
+
+                // Display filtered notifications
+                filteredNotifications.forEach(notification => {
+                    const notificationElement = document.createElement('div');
+                    notificationElement.className = `notification-item ${notification.read ? 'read' : 'unread'}`;
+                    
+                    let detailsHtml = '';
+                    if (notification.type === 'low_stock') {
+                        detailsHtml = `
+                            <div class="notification-details">
+                                <p>Item: ${notification.details.itemName}</p>
+                                <p>Current Quantity: ${notification.details.currentQuantity}</p>
+                                <p>Category: ${notification.details.category}</p>
+                            </div>
+                        `;
+                    } else if (notification.type === 'out_of_stock') {
+                        detailsHtml = `
+                            <div class="notification-details">
+                                <p>Item: ${notification.details.itemName}</p>
+                                <p>Category: ${notification.details.category}</p>
+                                <p>Status: Out of Stock</p>
+                            </div>
+                        `;
+                    } else if (notification.type === 'near_expiration') {
+                        detailsHtml = `
+                            <div class="notification-details">
+                                <p>Item: ${notification.details.itemName}</p>
+                                <p>Expiration Date: ${notification.details.expirationDate}</p>
+                                <p>Category: ${notification.details.category}</p>
+                            </div>
+                        `;
+                    } else if (notification.type === 'near_due_date') {
+                        detailsHtml = `
+                            <div class="notification-details">
+                                <p>Item: ${notification.details.itemName}</p>
+                                <p>Due Date: ${notification.details.dueDate}</p>
+                                <p>Borrower: ${notification.details.borrower}</p>
+                                <p>Department: ${notification.details.department}</p>
+                            </div>
+                        `;
+                    }
+
+                    notificationElement.innerHTML = `
+                        <div class="notification-content">
+                            <div class="notification-header">
+                                <span class="notification-type ${notification.type}">${notification.type === 'low_stock' ? 'Low Stock' : 
+                                                                                    notification.type === 'out_of_stock' ? 'Out of Stock' : 
+                                                                                    notification.type === 'near_expiration' ? 'Near Expiration' :
+                                                                                    notification.type === 'near_due_date' ? 'Near Due Date' :
+                                                                                    notification.type}</span>
+                                <span class="notification-time">${new Date(notification.timestamp).toLocaleString()}</span>
+                            </div>
+                            <p class="notification-message">${notification.message}</p>
+                            ${detailsHtml}
+                        </div>
+                        <div class="notification-actions">
+                            ${!notification.read ? `<button onclick="markNotificationAsRead(${notification.id})" class="mark-read-button">Mark as Read</button>` : ''}
+                        </div>
+                    `;
+
+                    container.appendChild(notificationElement);
+                });
+            } catch (error) {
+                console.error('Error filtering notifications:', error);
+                container.innerHTML = '<div class="no-notifications">Error loading notifications</div>';
+            }
+        }
+
+        // Function to display notifications
+        async function displayNotifications() {
+            // Reset search and filter before displaying all notifications
+            document.getElementById('searchInput').value = '';
+            document.getElementById('notificationFilter').value = '';
+            
+            // Use the filter function with empty criteria to show all
+            await filterNotifications();
         }
 
         // Initialize notifications display
         document.addEventListener('DOMContentLoaded', function() {
-            updateUserInfo();
+            // First load existing notifications
             displayNotifications();
-            markAllNotificationsAsRead(); // Mark all as read when viewing the page
+            
+            // Then check server for new notifications (auto-refresh on page load)
+            refreshNotifications(true);
+            
+            // Set up periodic auto-refresh every 2 minutes
+            const autoRefreshInterval = 2 * 60 * 1000; // 2 minutes in milliseconds
+            setInterval(() => {
+                refreshNotifications(true);
+            }, autoRefreshInterval);
+            
+            // Add event listeners for search and filter
+            document.getElementById('searchInput').addEventListener('input', filterNotifications);
+            document.getElementById('notificationFilter').addEventListener('change', filterNotifications);
         });
 
         function logout() {

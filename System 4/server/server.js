@@ -603,12 +603,52 @@ async function initializeBorrowedItemsTable() {
     }
 }
 
+// Initialize notifications table
+async function initializeNotificationsTable() {
+    try {
+        // First, check if the table exists
+        const tableExists = await getOne(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'"
+        );
+        
+        // If the table exists, drop it to ensure we have the right schema
+        if (tableExists) {
+            console.log('Dropping existing notifications table to recreate with updated schema');
+            await runQuery('DROP TABLE IF EXISTS notifications');
+        }
+        
+        // Create notifications table
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                details TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                read INTEGER DEFAULT 0,
+                resolved INTEGER DEFAULT 0,
+                resolved_timestamp DATETIME,
+                resolved_by INTEGER,
+                resolved_note TEXT,
+                user_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (resolved_by) REFERENCES users(id)
+            )
+        `);
+        
+        console.log('Notifications table initialized with updated schema');
+    } catch (err) {
+        console.error('Error initializing notifications table:', err);
+    }
+}
+
 // Initialize tables sequentially to avoid transaction conflicts
 async function initializeTables() {
     try {
         await initializeNotesTable();
         await initializeActivityLogTable();
         await initializeBorrowedItemsTable();
+        await initializeNotificationsTable();
         await initializeDefaultUsers();
         console.log('Database tables initialized');
     } catch (err) {
@@ -738,46 +778,293 @@ app.post('/api/activities', async (req, res) => {
 // Notifications endpoints
 app.get('/api/notifications', async (req, res) => {
     try {
-        const notifications = await getAll('SELECT * FROM notifications ORDER BY timestamp DESC LIMIT 100');
-        res.json(notifications);
+        // First check if the notifications table exists with the correct schema
+        const tableInfo = await getAll("PRAGMA table_info(notifications)");
+        const columns = tableInfo.map(col => col.name);
+        
+        // If the table doesn't have the right columns, initialize it
+        if (!columns.includes('user_id') || !columns.includes('read') || !columns.includes('resolved')) {
+            await initializeNotificationsTable();
+        }
+        
+        const userId = req.query.user_id;  // Optional user filter
+        const showResolved = req.query.show_resolved === 'true';  // Filter for resolved status
+        
+        let whereClause = showResolved ? '' : 'WHERE resolved = 0';
+        const params = [];
+        
+        if (userId) {
+            whereClause = showResolved 
+                ? `WHERE (user_id = ? OR user_id IS NULL)` 
+                : `WHERE resolved = 0 AND (user_id = ? OR user_id IS NULL)`;
+            params.push(userId);
+        }
+        
+        const query = `
+            SELECT id, type, message, details, timestamp, read, resolved, 
+                   resolved_timestamp, resolved_by, resolved_note, user_id
+            FROM notifications
+            ${whereClause}
+            ORDER BY timestamp DESC LIMIT 100
+        `;
+        
+        const notifications = await getAll(query, params);
+        
+        // Parse the details JSON string if it exists
+        const parsedNotifications = notifications.map(notification => ({
+            ...notification,
+            details: notification.details ? JSON.parse(notification.details) : {}
+        }));
+        
+        res.json({ 
+            success: true, 
+            notifications: parsedNotifications 
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error fetching notifications:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 app.post('/api/notifications', async (req, res) => {
     try {
-        const { type, message, details } = req.body;
-        const timestamp = new Date().toISOString();
+        const { type, message, details, user_id } = req.body;
+        
+        if (!type || !message) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Type and message are required'
+            });
+        }
+        
+        const detailsJson = details ? JSON.stringify(details) : null;
         
         const result = await runQuery(
-            'INSERT INTO notifications (type, message, details, timestamp) VALUES (?, ?, ?, ?)',
-            [type, message, JSON.stringify(details), timestamp]
+            `INSERT INTO notifications (type, message, details, user_id, timestamp)
+             VALUES (?, ?, ?, ?, datetime('now'))`,
+            [type, message, detailsJson, user_id || null]
         );
         
-        res.json({ id: result.lastID, type, message, details, timestamp, read: 0 });
+        const newNotification = await getOne(
+            `SELECT id, type, message, details, timestamp, read, user_id
+             FROM notifications WHERE id = ?`,
+            [result.lastID]
+        );
+        
+        // Parse the details JSON for the response
+        newNotification.details = newNotification.details ? 
+            JSON.parse(newNotification.details) : {};
+        
+        res.status(201).json({ 
+            success: true, 
+            notification: newNotification 
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error creating notification:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 app.put('/api/notifications/:id/read', async (req, res) => {
     try {
-        await runQuery('UPDATE notifications SET read = 1 WHERE id = ?', [req.params.id]);
-        res.json({ message: 'Notification marked as read' });
+        const { id } = req.params;
+        
+        await runQuery(
+            'UPDATE notifications SET read = 1 WHERE id = ?', 
+            [id]
+        );
+        
+        const updatedNotification = await getOne(
+            `SELECT id, type, message, details, timestamp, read, user_id
+             FROM notifications WHERE id = ?`,
+            [id]
+        );
+        
+        if (!updatedNotification) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Notification not found' 
+            });
+        }
+        
+        // Parse the details JSON for the response
+        updatedNotification.details = updatedNotification.details ? 
+            JSON.parse(updatedNotification.details) : {};
+        
+        res.json({ 
+            success: true, 
+            notification: updatedNotification 
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error marking notification as read:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
 app.put('/api/notifications/read-all', async (req, res) => {
     try {
-        await runQuery('UPDATE notifications SET read = 1 WHERE read = 0');
-        res.json({ message: 'All notifications marked as read' });
+        const { user_id } = req.body;
+        
+        let query = 'UPDATE notifications SET read = 1 WHERE read = 0';
+        const params = [];
+        
+        if (user_id) {
+            query = 'UPDATE notifications SET read = 1 WHERE read = 0 AND (user_id = ? OR user_id IS NULL)';
+            params.push(user_id);
+        }
+        
+        await runQuery(query, params);
+        
+        res.json({ 
+            success: true, 
+            message: 'All notifications marked as read' 
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error marking all notifications as read:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
+
+// Auto-notification endpoints for system checks
+app.get('/api/notifications/check', async (req, res) => {
+    try {
+        // Get low stock items (under 20 units)
+        const lowStockItems = await getAll(
+            `SELECT * FROM items WHERE quantity <= 20 AND quantity > 0 AND status != 'Out of Stock'`
+        );
+        
+        // Get out of stock items
+        const outOfStockItems = await getAll(
+            `SELECT * FROM items WHERE quantity = 0 OR status = 'Out of Stock'`
+        );
+        
+        // Get items near expiration date (within 30 days)
+        const nearExpirationItems = await getAll(
+            `SELECT * FROM items 
+             WHERE expiration_date IS NOT NULL 
+             AND date(expiration_date) > date('now') 
+             AND date(expiration_date) <= date('now', '+30 days')`
+        );
+        
+        // Get borrowed items nearing due date (within 7 days)
+        const nearDueItems = await getAll(
+            `SELECT * FROM borrowed_items
+             WHERE status != 'Returned'
+             AND date(due_date) > date('now')
+             AND date(due_date) <= date('now', '+7 days')`
+        );
+        
+        // Create notifications for each condition
+        const notifications = {
+            lowStock: [],
+            outOfStock: [],
+            nearExpiration: [],
+            nearDue: []
+        };
+        
+        // Process low stock items
+        for (const item of lowStockItems) {
+            const notification = await createSystemNotification(
+                'low_stock',
+                `Low Stock Alert: ${item.name}`,
+                {
+                    itemName: item.name,
+                    currentQuantity: item.quantity,
+                    category: item.category
+                }
+            );
+            if (notification) notifications.lowStock.push(notification);
+        }
+        
+        // Process out of stock items
+        for (const item of outOfStockItems) {
+            const notification = await createSystemNotification(
+                'out_of_stock',
+                `Out of Stock Alert: ${item.name}`,
+                {
+                    itemName: item.name,
+                    category: item.category
+                }
+            );
+            if (notification) notifications.outOfStock.push(notification);
+        }
+        
+        // Process near expiration items
+        for (const item of nearExpirationItems) {
+            const notification = await createSystemNotification(
+                'near_expiration',
+                `Expiration Alert: ${item.name}`,
+                {
+                    itemName: item.name,
+                    expirationDate: item.expiration_date,
+                    category: item.category
+                }
+            );
+            if (notification) notifications.nearExpiration.push(notification);
+        }
+        
+        // Process near due items
+        for (const item of nearDueItems) {
+            const notification = await createSystemNotification(
+                'near_due_date',
+                `Due Date Alert: ${item.item_name}`,
+                {
+                    itemName: item.item_name,
+                    dueDate: item.due_date,
+                    borrower: item.borrower_name,
+                    department: item.department
+                }
+            );
+            if (notification) notifications.nearDue.push(notification);
+        }
+        
+        res.json({
+            success: true,
+            notifications
+        });
+    } catch (err) {
+        console.error('Error checking for notifications:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Helper function to create system notifications without duplicates
+async function createSystemNotification(type, message, details) {
+    try {
+        // Check if a similar unread notification already exists
+        const existingSimilar = await getOne(
+            `SELECT id FROM notifications 
+             WHERE type = ? AND message = ? AND read = 0 AND details = ?`,
+            [type, message, JSON.stringify(details)]
+        );
+        
+        if (existingSimilar) {
+            return null; // Skip creating duplicate notification
+        }
+        
+        // Create new notification
+        const result = await runQuery(
+            `INSERT INTO notifications (type, message, details, timestamp)
+             VALUES (?, ?, ?, datetime('now'))`,
+            [type, message, JSON.stringify(details)]
+        );
+        
+        const newNotification = await getOne(
+            `SELECT id, type, message, details, timestamp, read
+             FROM notifications WHERE id = ?`,
+            [result.lastID]
+        );
+        
+        // Parse the details JSON for the response
+        newNotification.details = newNotification.details ? 
+            JSON.parse(newNotification.details) : {};
+            
+        return newNotification;
+    } catch (err) {
+        console.error('Error creating system notification:', err);
+        return null;
+    }
+}
 
 // User authentication endpoints
 app.post('/api/auth/login', async (req, res) => {
@@ -908,7 +1195,7 @@ initializeDefaultUsers();
 
 // Serve index.html for the root route
 app.get('/', (req, res) => {
-    const indexPath = path.join(__dirname, '..', 'index.html');
+    const indexPath = path.join(__dirname, '..', 'static', 'index.html');
     res.sendFile(indexPath);
 });
 
@@ -1179,7 +1466,7 @@ app.get('/inventory', async (req, res) => {
 
         // Read the HTML template
         let html = await require('fs').promises.readFile(
-            path.join(__dirname, '..', 'inventory.html'), 
+            path.join(__dirname, '..', 'static', 'inventory.html'), 
             'utf8'
         );
 
@@ -1596,7 +1883,7 @@ app.get('/api/recent-activities', async (req, res) => {
 
 // Move catch-all route to the end
 app.get('*', (req, res) => {
-    const indexPath = path.join(__dirname, '..', 'index.html');
+    const indexPath = path.join(__dirname, '..', 'static', 'index.html');
     res.sendFile(indexPath);
 });
 
@@ -1612,6 +1899,149 @@ app.get('/api/inventory', async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         res.json({ success: true, items });
     } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Debug endpoint to reinitialize tables
+app.get('/debug/reinitialize-tables', async (req, res) => {
+    try {
+        console.log('Reinitializing all database tables');
+        await initializeTables();
+        res.json({ 
+            success: true, 
+            message: 'Tables reinitialized successfully'
+        });
+    } catch (err) {
+        console.error('Error reinitializing tables:', err);
+        res.status(500).json({ 
+            success: false, 
+            error: err.message
+        });
+    }
+});
+
+// Resolve a notification
+app.put('/api/notifications/:id/resolve', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { resolved_note, user_id } = req.body;
+        
+        // Check if the notification exists
+        const notification = await getOne('SELECT * FROM notifications WHERE id = ?', [id]);
+        if (!notification) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Notification not found' 
+            });
+        }
+        
+        // Mark as resolved
+        await runQuery(
+            `UPDATE notifications 
+             SET resolved = 1, 
+                 resolved_timestamp = datetime('now'), 
+                 resolved_by = ?, 
+                 resolved_note = ?,
+                 read = 1
+             WHERE id = ?`,
+            [user_id || null, resolved_note || null, id]
+        );
+        
+        // Get the updated notification
+        const updatedNotification = await getOne(
+            `SELECT id, type, message, details, timestamp, read, resolved, 
+                    resolved_timestamp, resolved_by, resolved_note, user_id
+             FROM notifications WHERE id = ?`,
+            [id]
+        );
+        
+        // Parse the details JSON
+        updatedNotification.details = updatedNotification.details ? 
+            JSON.parse(updatedNotification.details) : {};
+        
+        // Also handle the condition that triggered this notification if possible
+        try {
+            // For low stock notifications, check if we should create a restocked notification
+            if (notification.type === 'low_stock' && notification.details) {
+                const details = JSON.parse(notification.details);
+                if (details.itemName) {
+                    // Get the current item info to see if it's been restocked
+                    const item = await getOne(
+                        'SELECT * FROM items WHERE name = ?',
+                        [details.itemName]
+                    );
+                    
+                    // If the item has been restocked above the threshold, create a restocked notification
+                    if (item && item.quantity > 20) {
+                        await createSystemNotification(
+                            'item_restocked',
+                            `Item Restocked: ${item.name}`,
+                            {
+                                itemName: item.name,
+                                currentQuantity: item.quantity,
+                                category: item.category,
+                                previousNotificationId: id
+                            }
+                        );
+                    }
+                }
+            }
+            // Similarly for other notification types...
+        } catch (autoResolveErr) {
+            console.error('Error during auto-resolution:', autoResolveErr);
+            // Continue anyway, since the main resolve operation succeeded
+        }
+        
+        res.json({ 
+            success: true, 
+            notification: updatedNotification,
+            message: 'Notification resolved successfully' 
+        });
+    } catch (err) {
+        console.error('Error resolving notification:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Get all resolved notifications
+app.get('/api/notifications/resolved', async (req, res) => {
+    try {
+        const userId = req.query.user_id;  // Optional user filter
+        let query = `
+            SELECT id, type, message, details, timestamp, read, resolved, 
+                   resolved_timestamp, resolved_by, resolved_note, user_id
+            FROM notifications
+            WHERE resolved = 1
+            ORDER BY resolved_timestamp DESC LIMIT 100
+        `;
+        const params = [];
+        
+        if (userId) {
+            query = `
+                SELECT id, type, message, details, timestamp, read, resolved, 
+                       resolved_timestamp, resolved_by, resolved_note, user_id
+                FROM notifications
+                WHERE resolved = 1 AND (user_id = ? OR user_id IS NULL)
+                ORDER BY resolved_timestamp DESC LIMIT 100
+            `;
+            params.push(userId);
+        }
+        
+        const notifications = await getAll(query, params);
+        
+        // Parse the details JSON string if it exists
+        const parsedNotifications = notifications.map(notification => ({
+            ...notification,
+            details: notification.details ? JSON.parse(notification.details) : {}
+        }));
+        
+        res.json({ 
+            success: true, 
+            notifications: parsedNotifications 
+        });
+    } catch (err) {
+        console.error('Error fetching resolved notifications:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });
