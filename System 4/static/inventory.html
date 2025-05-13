@@ -428,7 +428,27 @@
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
                 document.getElementById('newCategoryName').focus();
+                updateCategoryList();
             };
+
+            function updateCategoryList() {
+                const categoryList = document.getElementById('categoryList');
+                if (!categoryList) return;
+                
+                categoryList.innerHTML = '';
+                window.allCategories.forEach(category => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center justify-between p-2 bg-secondary-50 rounded';
+                    div.innerHTML = `
+                        <span class="text-secondary-900">${category.name}</span>
+                        <button onclick="deleteCategory('${category.name}')" 
+                                class="text-red-600 hover:text-red-800 px-2 py-1 rounded">
+                            Delete
+                        </button>
+                    `;
+                    categoryList.appendChild(div);
+                });
+            }
 
             window.closeCategoryModal = function() {
                 document.getElementById('categoryModal').classList.add('hidden');
@@ -495,6 +515,20 @@
                     newOption.textContent = '+ Add New Category';
                     categorySelect.appendChild(newOption);
                 }
+
+                // Update the category filter dropdown as well
+                const categoryFilter = document.getElementById('categoryFilter');
+                if (categoryFilter) {
+                    const currentValue = categoryFilter.value;
+                    categoryFilter.innerHTML = '<option value="">All Categories</option>';
+                    window.allCategories.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category.name;
+                        option.textContent = category.name;
+                        categoryFilter.appendChild(option);
+                    });
+                    categoryFilter.value = currentValue;
+                }
             }
 
             // When a new category is added, update the global array and dropdown
@@ -529,6 +563,30 @@
                 } catch (error) {
                     console.error('Error adding category:', error);
                     showNotification(`Error adding category: ${error.message}`, 'error');
+                }
+            }
+
+            // Function to delete a category
+            async function deleteCategory(categoryName) {
+                if (!confirm(`Are you sure you want to delete the category "${categoryName}"?`)) {
+                    return;
+                }
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/categories/${encodeURIComponent(categoryName)}`, {
+                        method: 'DELETE'
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to delete category');
+                    }
+                    // Update global categories and dropdowns
+                    window.allCategories = window.allCategories.filter(cat => cat.name !== categoryName);
+                    updateCategoryDropdown();
+                    updateCategoryList();
+                    showNotification(`Category "${categoryName}" deleted successfully`);
+                } catch (error) {
+                    console.error('Error deleting category:', error);
+                    showNotification(`Error deleting category: ${error.message}`, 'error');
                 }
             }
 
@@ -621,6 +679,12 @@
 
             // Initialize when DOM is ready
             document.addEventListener('DOMContentLoaded', () => {
+                // Delete drug category if it exists
+                const drugCategory = window.allCategories.find(cat => cat.name.toLowerCase() === 'drug');
+                if (drugCategory) {
+                    deleteCategory(drugCategory.name);
+                }
+                
                 // Check user role and hide Add New Item button if member
                 const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
                 if (currentUser && currentUser.role === 'member') {
@@ -675,6 +739,11 @@
                             showNotification('No items found matching your search.', 'error');
                         }
                     }, 300));
+                }
+
+                // Show User Approvals link only for department heads
+                if (currentUser && currentUser.role === 'department_head') {
+                    document.getElementById('userApprovalsLink').style.display = '';
                 }
             });
 
@@ -875,6 +944,72 @@
             }
         });
     });
+
+    // Printable Inventory Modal Functions
+    window.showPrintableInventoryModal = function() {
+        const modal = document.getElementById('printableInventoryModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        populatePrintableInventory();
+    };
+
+    window.closePrintableInventoryModal = function() {
+        const modal = document.getElementById('printableInventoryModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    };
+
+    function populatePrintableInventory() {
+        const content = document.getElementById('printableInventoryContent');
+        if (!content) return;
+        // Group items by category
+        const itemsByCategory = {};
+        window.allInventoryItems.forEach(item => {
+            const cat = item.category || 'Uncategorized';
+            if (!itemsByCategory[cat]) itemsByCategory[cat] = [];
+            itemsByCategory[cat].push(item);
+        });
+        let html = '';
+        Object.keys(itemsByCategory).sort().forEach(category => {
+            html += `<h3 style="margin-top:1.5em;font-size:1.1em;font-weight:bold;">${category}</h3>`;
+            html += '<table style="width:100%;border-collapse:collapse;margin-bottom:1em;">';
+            html += '<tr style="background:#f3f4f6;"><th style="border:1px solid #ddd;padding:4px;text-align:left;">Name</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Status</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Availability</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Quantity</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Expiration Date</th></tr>';
+            itemsByCategory[category].forEach(item => {
+                html += `<tr><td style="border:1px solid #ddd;padding:4px;">${item.name}</td><td style="border:1px solid #ddd;padding:4px;">${item.status || ''}</td><td style="border:1px solid #ddd;padding:4px;">${item.availability || ''}</td><td style="border:1px solid #ddd;padding:4px;">${item.quantity || 0}</td><td style="border:1px solid #ddd;padding:4px;">${item.expiration_date || ''}</td></tr>`;
+            });
+            html += '</table>';
+        });
+        content.innerHTML = html;
+    }
+
+    window.printInventoryList = function() {
+        const printContents = document.getElementById('printableInventoryContent').innerHTML;
+        const printWindow = window.open('', '', 'height=700,width=900');
+        printWindow.document.write('<html><head><title>Printable Inventory List</title>');
+        printWindow.document.write('<style>body{font-family:Arial,sans-serif;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:4px;}th{background:#f3f4f6;}</style>');
+        printWindow.document.write('</head><body >');
+        printWindow.document.write('<h2>Inventory List</h2>');
+        printWindow.document.write(printContents);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+    };
+
+    window.exportInventoryToWord = function() {
+        const content = document.getElementById('printableInventoryContent').innerHTML;
+        const header = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><title>Inventory List</title></head><body>';
+        const footer = '</body></html>';
+        const sourceHTML = header + '<h2>Inventory List</h2>' + content + footer;
+        const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+        const fileDownload = document.createElement('a');
+        document.body.appendChild(fileDownload);
+        fileDownload.href = source;
+        fileDownload.download = 'inventory-list.doc';
+        fileDownload.click();
+        document.body.removeChild(fileDownload);
+    };
     </script>
 </head>
 <body class="min-h-screen bg-secondary-50">
@@ -949,6 +1084,12 @@
                     </svg>
                     <span>Notes</span>
                 </a>
+                <a href="user-approvals.html" id="userApprovalsLink" style="display:none" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span>User Approvals</span>
+                </a>
             </nav>
 
             <div class="absolute bottom-0 w-64 p-4 border-t border-secondary-200">
@@ -979,6 +1120,10 @@
                     <button onclick="showAddItemModal()" class="btn-primary flex items-center space-x-2">
                         <span>+</span>
                         <span>Add New Item</span>
+                    </button>
+                    <button onclick="showPrintableInventoryModal()" class="btn-secondary flex items-center space-x-2">
+                        <span>🗒️</span>
+                        <span>Printable Inventory List</span>
                     </button>
                     <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
                         <div class="relative flex-1 md:w-64">
@@ -1102,16 +1247,37 @@
     <div id="categoryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
         <div class="bg-white rounded-lg p-6 w-full max-w-md">
             <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-semibold text-secondary-900">Add New Category</h2>
+                <h2 class="text-xl font-semibold text-secondary-900">Manage Categories</h2>
                 <button onclick="closeCategoryModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
             </div>
             <form id="categoryForm" onsubmit="handleAddCategory(event)" class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-secondary-700 mb-1">Category Name</label>
+                    <label class="block text-sm font-medium text-secondary-700 mb-1">Add New Category</label>
                     <input type="text" id="newCategoryName" class="input-field" placeholder="Enter category name" required>
                 </div>
                 <button type="submit" class="w-full btn-primary">Add Category</button>
             </form>
+            <div class="mt-6">
+                <h3 class="text-lg font-medium text-secondary-900 mb-3">Existing Categories</h3>
+                <div id="categoryList" class="space-y-2">
+                    <!-- Categories will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Printable Inventory Modal -->
+    <div id="printableInventoryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto relative">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-secondary-900">Printable Inventory List</h2>
+                <button onclick="closePrintableInventoryModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
+            </div>
+            <div id="printableInventoryContent" class="mb-4">
+                <!-- Inventory list will be populated here -->
+            </div>
+            <button onclick="printInventoryList()" class="btn-primary w-full mb-2">Print</button>
+            <button onclick="exportInventoryToWord()" class="btn-secondary w-full">Export to Word</button>
         </div>
     </div>
 </body>

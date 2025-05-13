@@ -188,10 +188,44 @@
 </head>
 <body class="min-h-screen bg-secondary-50">
     <script>
-        // Check if user is logged in
-        if (!sessionStorage.getItem('isLoggedIn')) {
-            window.location.href = 'index.html';
+        // Check if user is logged in and verify with backend
+        async function checkAuth() {
+            const isLoggedIn = sessionStorage.getItem('isLoggedIn');
+            const currentUser = sessionStorage.getItem('currentUser');
+            
+            if (!isLoggedIn || !currentUser) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            try {
+                const user = JSON.parse(currentUser);
+                const response = await fetch(`http://localhost:3000/api/auth/verify?username=${encodeURIComponent(user.username)}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    // If verification fails, clear session and redirect to login
+                    sessionStorage.removeItem('isLoggedIn');
+                    sessionStorage.removeItem('currentUser');
+                    window.location.href = 'index.html';
+                    return;
+                }
+            } catch (error) {
+                console.error('Auth verification error:', error);
+                sessionStorage.removeItem('isLoggedIn');
+                sessionStorage.removeItem('currentUser');
+                window.location.href = 'index.html';
+            }
         }
+
+        // Run auth check when page loads
+        checkAuth();
     </script>
 
     <div class="flex h-screen">
@@ -254,6 +288,12 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h10M7 11h10M7 15h6M5 5v14a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2z"/>
                     </svg>
                     <span>Notes</span>
+                </a>
+                <a href="user-approvals.html" id="userApprovalsLink" style="display:none" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span>User Approvals</span>
                 </a>
             </nav>
 
@@ -726,6 +766,10 @@
                     const supplierLink = document.querySelector('.supplier-link');
                     if (notesLink) notesLink.style.display = 'none';
                     if (supplierLink) supplierLink.style.display = 'none';
+                }
+                // Show User Approvals link only for department heads
+                if (currentUser.role === 'department_head') {
+                    document.getElementById('userApprovalsLink').style.display = '';
                 }
             }
         });

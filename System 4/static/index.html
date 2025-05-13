@@ -98,9 +98,11 @@
         
         async function handleLogin(event) {
             event.preventDefault();
-            
+            console.log("handleLogin start");
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
+            console.log("Username:", username, "Password:", password);
+            
             const rememberMe = document.getElementById('rememberMe').checked;
 
             // Basic validation
@@ -108,6 +110,9 @@
                 showError("Please enter both username and password");
                 return false;
             }
+
+            alert("About to send login request");
+            console.log("About to call fetch");
 
             // Get the submit button
             const submitButton = document.querySelector('button[type="submit"]');
@@ -132,11 +137,12 @@
                         password: password.trim() 
                     })
                 });
+                console.log("Fetch sent, response status:", response.status);
 
                 const data = await response.json();
                 console.log('Login response:', data);
 
-                if (data.success) {
+                if (response.ok && data.success) {
                     // Store login state and user info in session
                     sessionStorage.setItem('isLoggedIn', 'true');
                     sessionStorage.setItem('currentUser', JSON.stringify(data.user));
@@ -166,7 +172,7 @@
                     submitButton.disabled = false;
                 }
             } catch (error) {
-                console.error('Login error:', error);
+                console.log("Error in fetch", error);
                 showError("An error occurred during login. Please try again.");
                 submitButton.innerHTML = originalButtonContent;
                 submitButton.disabled = false;

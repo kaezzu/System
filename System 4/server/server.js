@@ -234,6 +234,48 @@ app.post('/api/categories', async (req, res) => {
     }
 });
 
+// Delete category endpoint
+app.delete('/api/categories/:name', async (req, res) => {
+    const categoryName = req.params.name;
+    
+    try {
+        await runQuery('BEGIN TRANSACTION');
+
+        try {
+            // Get category details for logging
+            const category = await getOne('SELECT * FROM categories WHERE name = ?', [categoryName]);
+            
+            if (!category) {
+                await runQuery('ROLLBACK');
+                return res.status(404).json({ success: false, error: 'Category not found' });
+            }
+
+            // Delete the category
+            await runQuery('DELETE FROM categories WHERE name = ?', [categoryName]);
+
+            // Log activity
+            await runQuery(
+                `INSERT INTO activity_log (timestamp, action, details) 
+                 VALUES (datetime('now'), ?, ?)`,
+                ['delete_category', `Deleted category: ${categoryName}`]
+            );
+
+            await runQuery('COMMIT');
+
+            res.json({
+                success: true,
+                message: 'Category deleted successfully'
+            });
+        } catch (err) {
+            await runQuery('ROLLBACK');
+            throw err;
+        }
+    } catch (err) {
+        console.error('Error deleting category:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Helper function to generate custom item ID
 async function generateItemId() {
     // Get current date in YYYYMMDD format
@@ -649,6 +691,7 @@ async function initializeTables() {
         await initializeActivityLogTable();
         await initializeBorrowedItemsTable();
         await initializeNotificationsTable();
+        await ensureApprovedColumn();
         await initializeDefaultUsers();
         console.log('Database tables initialized');
     } catch (err) {
@@ -1069,82 +1112,86 @@ async function createSystemNotification(type, message, details) {
 // User authentication endpoints
 app.post('/api/auth/login', async (req, res) => {
     try {
-        console.log('Login attempt received:', {
-            username: req.body.username,
-            hasPassword: !!req.body.password
-        });
-
         const { username, password } = req.body;
-
         if (!username || !password) {
-            console.log('Missing credentials');
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Username and password are required' 
-            });
+            return res.status(400).json({ success: false, message: 'Username and password are required' });
         }
-
-        // First check if user exists
-        const userExists = await getOne('SELECT username FROM users WHERE username = ?', [username]);
-        if (!userExists) {
-            console.log('User not found:', username);
-            return res.status(401).json({ 
-                success: false, 
-                message: 'Invalid credentials' 
-            });
-        }
-
-        // Then check credentials
+        // Check credentials and approval
         const user = await getOne('SELECT * FROM users WHERE username = ? AND password = ?', [username, password]);
-        console.log('Authentication result:', {
-            userFound: !!user,
-            username: username,
-            role: user ? user.role : 'unknown'
-        });
-        
-        if (user) {
-            res.json({
-                success: true,
-                user: {
-                    id: user.id,
-                    username: user.username,
-                    role: user.role,
-                    fullName: user.full_name
-                }
-            });
-        } else {
-            console.log('Invalid password for user:', username);
-            res.status(401).json({ 
-                success: false, 
-                message: 'Invalid credentials' 
-            });
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
-    } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'An error occurred during login',
-            error: err.message 
+        if (!user.approved) {
+            return res.status(403).json({ success: false, message: 'Your account is pending approval by the department head.' });
+        }
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                fullName: user.full_name
+            }
         });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'An error occurred during login', error: err.message });
+    }
+});
+
+// Verify user authentication
+app.get('/api/auth/verify', async (req, res) => {
+    try {
+        const { username } = req.query;
+        if (!username) {
+            return res.status(401).json({ success: false, message: 'No username provided' });
+        }
+
+        const user = await getOne('SELECT * FROM users WHERE username = ?', [username]);
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'User not found' });
+        }
+        if (!user.approved) {
+            return res.status(403).json({ success: false, message: 'Your account is pending approval by the department head.' });
+        }
+
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                fullName: user.full_name
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'An error occurred during verification', error: err.message });
     }
 });
 
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { username, password, role, fullName, email } = req.body;
-        
-        // Check if username already exists
         const existingUser = await getOne('SELECT * FROM users WHERE username = ?', [username]);
         if (existingUser) {
             return res.status(400).json({ success: false, message: 'Username already exists' });
         }
-        
-        // Insert new user with email
         const result = await runQuery(
-            'INSERT INTO users (username, password, role, full_name, email) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO users (username, password, role, full_name, email, approved) VALUES (?, ?, ?, ?, ?, 0)',
             [username, password, role, fullName, email]
         );
-        
+        // Notify all department heads
+        const deptHeads = await getAll('SELECT id FROM users WHERE role = ? AND approved = 1', ['department_head']);
+        for (const head of deptHeads) {
+            await runQuery(
+                `INSERT INTO notifications (type, message, details, user_id, timestamp) VALUES (?, ?, ?, ?, datetime('now'))`,
+                [
+                    'user_approval',
+                    `New user registration: ${fullName || username}`,
+                    JSON.stringify({ username, fullName, email, role }),
+                    head.id
+                ]
+            );
+        }
         res.json({
             success: true,
             user: {
@@ -1170,7 +1217,7 @@ async function initializeDefaultUsers() {
         const adminExists = users.some(user => user.username === 'admin');
         if (!adminExists) {
             await runQuery(
-                'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+                'INSERT INTO users (username, password, role, approved) VALUES (?, ?, ?, 1)',
                 ['admin', 'admin', 'department_head']
             );
         }
@@ -1179,7 +1226,7 @@ async function initializeDefaultUsers() {
         const memberExists = users.some(user => user.username === 'member');
         if (!memberExists) {
             await runQuery(
-                'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+                'INSERT INTO users (username, password, role, approved) VALUES (?, ?, ?, 1)',
                 ['member', 'member', 'member']
             );
         }
@@ -2032,4 +2079,59 @@ app.get('/api/notifications/resolved', async (req, res) => {
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, '..', 'static', 'index.html');
     res.sendFile(indexPath);
+});
+
+// Ensure 'approved' column exists in users table
+async function ensureApprovedColumn() {
+    try {
+        const columns = await getAll("PRAGMA table_info(users)");
+        const hasApproved = columns.some(col => col.name === 'approved');
+        if (!hasApproved) {
+            await runQuery('ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0');
+            console.log("Added 'approved' column to users table");
+        }
+    } catch (err) {
+        console.error("Error ensuring 'approved' column:", err);
+    }
+}
+
+// Call on startup
+ensureApprovedColumn();
+
+// Endpoint to get all pending users
+app.get('/api/pending-users', async (req, res) => {
+    try {
+        const users = await getAll('SELECT id, username, full_name, role, email FROM users WHERE approved = 0');
+        res.json({ success: true, users });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Endpoint to approve a user
+app.post('/api/approve-user', async (req, res) => {
+    try {
+        const { id } = req.body;
+        await runQuery('UPDATE users SET approved = 1 WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Endpoint to reject (delete) a user
+app.post('/api/reject-user', async (req, res) => {
+    try {
+        const { id } = req.body;
+        await runQuery('DELETE FROM users WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// TEMPORARY: Approve admin user for debug
+app.get('/debug/approve-admin', async (req, res) => {
+    await runQuery('UPDATE users SET approved = 1 WHERE username = ?', ['admin']);
+    res.send('Admin approved!');
 });
