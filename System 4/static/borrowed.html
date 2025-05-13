@@ -448,6 +448,18 @@
             // Get current user role
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
             const isMember = currentUser && currentUser.role === 'member';
+            items.sort((a, b) => {
+                // Put 'Borrowed' status first, then 'Returned'
+                if (a.status === b.status) {
+                    // If same status, sort by date descending
+                    return new Date(b.borrow_date) - new Date(a.borrow_date);
+                }
+                // 'Borrowed' comes before 'Returned'
+                if (a.status === 'Borrowed') return -1;
+                if (b.status === 'Borrowed') return 1;
+                // Otherwise, keep original order
+                return 0;
+            });
             items.forEach(item => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
