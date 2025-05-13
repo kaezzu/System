@@ -3,6 +3,10 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const { runQuery, getAll, getOne } = require('./database');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const port = 3000;
@@ -705,6 +709,24 @@ async function initializeUsersTable() {
     }
 }
 
+// Initialize password_reset_tokens table
+async function initializePasswordResetTokensTable() {
+    try {
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                expires_at DATETIME NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        `);
+    } catch (err) {
+        console.error('Error initializing password_reset_tokens table:', err);
+    }
+}
+
 // Initialize tables sequentially to avoid transaction conflicts
 async function initializeTables() {
     try {
@@ -713,6 +735,7 @@ async function initializeTables() {
         await initializeBorrowedItemsTable();
         await initializeNotificationsTable();
         await initializeUsersTable();
+        await initializePasswordResetTokensTable();
         await ensureApprovedColumn();
         await initializeDefaultUsers();
         console.log('Database tables initialized');
@@ -1138,9 +1161,14 @@ app.post('/api/auth/login', async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ success: false, message: 'Username and password are required' });
         }
-        // Check credentials
-        const user = await getOne('SELECT * FROM users WHERE username = ? AND password = ?', [username, password]);
+        // Fetch user by username
+        const user = await getOne('SELECT * FROM users WHERE username = ?', [username]);
         if (!user) {
+            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        }
+        // Compare password using bcrypt
+        const passwordMatch = await bcrypt.compare(password, user.password);
+        if (!passwordMatch) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
         // Only check approval status if the user has never logged in before
@@ -1201,9 +1229,11 @@ app.post('/api/auth/register', async (req, res) => {
         if (existingUser) {
             return res.status(400).json({ success: false, message: 'Username already exists' });
         }
+        // Hash the password before saving
+        const hashedPassword = await bcrypt.hash(password, 10);
         const result = await runQuery(
             'INSERT INTO users (username, password, role, full_name, email, approved) VALUES (?, ?, ?, ?, ?, 0)',
-            [username, password, role, fullName, email]
+            [username, hashedPassword, role, fullName, email]
         );
         // Notify all department heads
         const deptHeads = await getAll('SELECT id FROM users WHERE role = ? AND approved = 1', ['department_head']);
@@ -2179,4 +2209,85 @@ app.get('/debug/approve-admin', async (req, res) => {
 app.get('*', (req, res) => {
     const indexPath = path.join(__dirname, '..', 'static', 'index.html');
     res.sendFile(indexPath);
+});
+
+// Helper: send password reset email
+async function sendPasswordResetEmail(email, token) {
+    console.log('SMTP Configuration:', {
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        secure: process.env.SMTP_SECURE,
+        user: process.env.SMTP_USER,
+        from: process.env.SMTP_FROM
+    });
+
+    const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+        },
+    });
+
+    try {
+        const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password.html?token=${token}`;
+        await transporter.sendMail({
+            from: process.env.SMTP_FROM || 'noreply@example.com',
+            to: email,
+            subject: 'Password Reset Request',
+            html: `<p>You requested a password reset. Click <a href="${resetUrl}">here</a> to reset your password. This link will expire in 1 hour.</p>`
+        });
+        console.log('Password reset email sent successfully to:', email);
+    } catch (error) {
+        console.error('Error sending password reset email:', error);
+        throw error;
+    }
+}
+
+// POST /api/auth/forgot-password
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    try {
+        // Find user by email
+        const user = await getOne('SELECT * FROM users WHERE email = ?', [email]);
+        if (!user) return res.status(404).json({ error: 'No user found with that email.' });
+        // Generate token
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+        // Store token
+        await runQuery('INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)', [user.id, token, expiresAt]);
+        // Send email
+        await sendPasswordResetEmail(email, token);
+        res.json({ message: 'Password reset email sent.' });
+    } catch (err) {
+        console.error('Forgot password error:', err);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+// POST /api/auth/reset-password
+app.post('/api/auth/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and new password are required.' });
+    try {
+        // Find token
+        const row = await getOne('SELECT * FROM password_reset_tokens WHERE token = ?', [token]);
+        if (!row) return res.status(400).json({ error: 'Invalid or expired token.' });
+        if (new Date(row.expires_at) < new Date()) {
+            await runQuery('DELETE FROM password_reset_tokens WHERE token = ?', [token]);
+            return res.status(400).json({ error: 'Token expired.' });
+        }
+        // Update user password
+        const hash = await bcrypt.hash(password, 10);
+        await runQuery('UPDATE users SET password = ? WHERE id = ?', [hash, row.user_id]);
+        // Delete token
+        await runQuery('DELETE FROM password_reset_tokens WHERE token = ?', [token]);
+        res.json({ message: 'Password has been reset.' });
+    } catch (err) {
+        console.error('Reset password error:', err);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
 });
