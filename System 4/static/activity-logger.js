@@ -35,7 +35,7 @@ const ActivityLogger = {
     async logActivity(action, details, options = {}) {
         try {
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-            const response = await fetch(`${API_BASE_URL}/activities`, {
+            const response = await fetch(`http://localhost:3000/api/activities`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

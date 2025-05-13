@@ -653,6 +653,30 @@
                 }
             });
         });
+
+        function updateSidebarVisibility() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                const fullName = currentUser.fullName || currentUser.full_name || currentUser.username;
+                document.getElementById('sidebarUserFullName').textContent = fullName;
+            }
+            const navLinks = document.querySelectorAll('nav a');
+            navLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (currentUser && currentUser.role === 'department_head') {
+                    link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'logistic_officer') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'member') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html') || href.includes('supplier.html') || href.includes('notes.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', updateSidebarVisibility);
     </script>
 </body>
 </html> 

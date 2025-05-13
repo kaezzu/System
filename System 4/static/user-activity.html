@@ -283,7 +283,7 @@
 
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', function() {
-            updateUserInfo();
+            updateSidebarVisibility();
             
             // Initialize rows per page dropdown
             const rowsPerPageSelect = document.getElementById('rowsPerPage');
@@ -347,11 +347,6 @@
                     header.classList.remove(stickyClass);
                 }
             });
-
-            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (currentUser && currentUser.role === 'department_head') {
-                document.getElementById('userApprovalsLink').style.display = '';
-            }
         });
 
         // Debounce helper function
@@ -373,14 +368,27 @@
             window.location.href = 'index.html';
         }
 
-        // Function to update user info in sidebar
-        function updateUserInfo() {
+        function updateSidebarVisibility() {
             const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
             if (currentUser) {
                 document.getElementById('sidebarUserName').textContent = currentUser.username;
                 document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
-                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
+                const fullName = currentUser.fullName || currentUser.full_name || currentUser.username;
+                document.getElementById('sidebarUserFullName').textContent = fullName;
             }
+            const navLinks = document.querySelectorAll('nav a');
+            navLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (currentUser && currentUser.role === 'department_head') {
+                    link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'logistic_officer') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'member') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html') || href.includes('supplier.html') || href.includes('notes.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                }
+            });
         }
 
         function formatRole(role) {

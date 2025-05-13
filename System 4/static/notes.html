@@ -639,15 +639,37 @@
 
         function formatRole(role) {
             switch(role) {
-                case 'department_head':
-                    return 'Department Head';
-                case 'logistic_officer':
-                    return 'Logistic Officer';
-                case 'member':
-                    return 'Member';
-                default:
-                    return role;
+                case 'department_head': return 'Department Head';
+                case 'logistic_officer': return 'Logistic Officer';
+                case 'member': return 'Member';
+                default: return role;
             }
+        }
+
+        function updateSidebarAndNotesVisibility() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            // Sidebar user info
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                const fullName = currentUser.fullName || currentUser.full_name || currentUser.username;
+                document.getElementById('sidebarUserFullName').textContent = fullName;
+            }
+            // Sidebar links
+            const navLinks = document.querySelectorAll('nav a');
+            navLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (currentUser && currentUser.role === 'department_head') {
+                    link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'logistic_officer') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'member') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html') || href.includes('supplier.html') || href.includes('notes.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                }
+            });
+            // Optionally, hide notes controls for non-admins here if needed
         }
 
         function logout() {
@@ -666,18 +688,9 @@
             }
         }
 
-        function updateUserInfo() {
-            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
-            if (currentUser) {
-                document.getElementById('sidebarUserName').textContent = currentUser.username;
-                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
-                document.getElementById('sidebarUserFullName').textContent = currentUser.fullName;
-            }
-        }
-
         // Attach event listeners for search, filter, and sort
         document.addEventListener('DOMContentLoaded', function() {
-            updateUserInfo();
+            updateSidebarAndNotesVisibility();
             fetchNotes();
             document.getElementById('searchInput').addEventListener('input', filterAndDisplayNotes);
             document.getElementById('filterSelect').addEventListener('change', filterAndDisplayNotes);

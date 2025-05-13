@@ -267,8 +267,8 @@
         const dueDateInput = document.getElementById('dueDate');
         const toggleDueDateBtn = document.getElementById('toggleDueDate');
 
-        // Global array to store all borrowed items
-        window.allBorrowedItems = [];
+        // Store all loaded borrowed items
+        let allBorrowedItems = [];
 
         // Function to update available items in the borrow select
         async function updateAvailableItems() {
@@ -414,23 +414,32 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const items = await response.json();
-                window.allBorrowedItems = items; // Store all items globally
-                displayBorrowedItems(window.allBorrowedItems);
+                allBorrowedItems = items;
+                applyBorrowedFilters();
             } catch (error) {
                 console.error('Error loading borrowed items:', error);
                 showNotification('Error loading borrowed items: ' + error.message, 'error');
             }
         }
 
-        // Function to filter borrowed items by search term
-        function filterBorrowedItems(searchTerm) {
-            searchTerm = searchTerm.toLowerCase();
-            return window.allBorrowedItems.filter(item =>
-                (item.item_name && item.item_name.toLowerCase().includes(searchTerm)) ||
-                (item.category && item.category.toLowerCase().includes(searchTerm)) ||
-                (item.borrower_name && item.borrower_name.toLowerCase().includes(searchTerm)) ||
-                (item.department && item.department.toLowerCase().includes(searchTerm))
-            );
+        // Filter and display items by status and search
+        function applyBorrowedFilters() {
+            const status = document.getElementById('statusFilter')?.value || '';
+            const searchInput = document.getElementById('searchInput');
+            const searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : '';
+            let filtered = allBorrowedItems;
+            if (status) {
+                filtered = filtered.filter(item => item.status === status);
+            }
+            if (searchTerm) {
+                filtered = filtered.filter(item =>
+                    (item.item_name && item.item_name.toLowerCase().includes(searchTerm)) ||
+                    (item.category && item.category.toLowerCase().includes(searchTerm)) ||
+                    (item.borrower_name && item.borrower_name.toLowerCase().includes(searchTerm)) ||
+                    (item.department && item.department.toLowerCase().includes(searchTerm))
+                );
+            }
+            displayBorrowedItems(filtered);
         }
 
         // Function to display borrowed items in the table
@@ -488,20 +497,12 @@
             });
         }
 
-        // Add search functionality (client-side)
+        // Add event listeners for status filter and search input
+        if (statusFilter) {
+            statusFilter.addEventListener('change', applyBorrowedFilters);
+        }
         if (searchInput) {
-            searchInput.addEventListener('input', debounce((e) => {
-                const value = e.target.value.trim();
-                if (!value) {
-                    displayBorrowedItems(window.allBorrowedItems);
-                    return;
-                }
-                const filtered = filterBorrowedItems(value);
-                displayBorrowedItems(filtered);
-                if (filtered.length === 0) {
-                    showNotification('No borrowed items found matching your search.', 'error');
-                }
-            }, 300));
+            searchInput.addEventListener('input', debounce(applyBorrowedFilters, 300));
         }
 
         // Helper function to debounce search input
@@ -527,27 +528,29 @@
             }
             
             if (!confirm('Are you sure you want to mark this item as returned?')) return;
-            
             try {
-                const response = await fetch(`${API_BASE_URL}/borrowed-items/${id}/return`, {
+                const response = await fetch(`http://localhost:3000/api/borrowed-items/${id}/return`, {
                     method: 'PUT'
                 });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
                 const data = await response.json();
-                
-                if (!data.success) {
-                    throw new Error(data.error || 'Failed to return item');
+                if (!response.ok || !data || !data.status || data.status === 'error' || data.success === false) {
+                    // If the item is already returned, show a specific message
+                    if (data && data.error && data.error.includes('already returned')) {
+                        showToast('This item has already been returned.', 'error');
+                    } else {
+                        throw new Error(data.error || 'Failed to return item');
+                    }
+                    // Refresh the table to reflect the latest state
+                    loadBorrowedItems();
+                    return;
                 }
-                
                 showToast('Item returned successfully!', 'success');
                 loadBorrowedItems();
             } catch (error) {
                 console.error('Error returning item:', error);
                 showToast(error.message || 'Error returning item', 'error');
+                // Always refresh the table on error to avoid stale UI
+                loadBorrowedItems();
             }
         }
 
@@ -695,6 +698,32 @@
         function showToast(message, type = 'success') {
             showNotification(message, type);
         }
+
+        function updateSidebarVisibility() {
+            const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+            if (currentUser) {
+                document.getElementById('sidebarUserName').textContent = currentUser.username;
+                document.getElementById('sidebarUserRole').textContent = formatRole(currentUser.role);
+                // Use fullName, full_name, or username as fallback
+                const fullName = currentUser.fullName || currentUser.full_name || currentUser.username;
+                document.getElementById('sidebarUserFullName').textContent = fullName;
+            }
+            const navLinks = document.querySelectorAll('nav a');
+            navLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (currentUser && currentUser.role === 'department_head') {
+                    link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'logistic_officer') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                } else if (currentUser && currentUser.role === 'member') {
+                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html') || href.includes('supplier.html') || href.includes('notes.html'))) link.style.display = 'none';
+                    else link.style.display = 'flex';
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', updateSidebarVisibility);
     </script>
 </body>
 </html> 

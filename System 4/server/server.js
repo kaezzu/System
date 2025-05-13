@@ -684,6 +684,27 @@ async function initializeNotificationsTable() {
     }
 }
 
+// Initialize users table
+async function initializeUsersTable() {
+    try {
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                full_name TEXT,
+                email TEXT,
+                approved INTEGER DEFAULT 0,
+                last_login DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+    } catch (err) {
+        console.error('Error initializing users table:', err);
+    }
+}
+
 // Initialize tables sequentially to avoid transaction conflicts
 async function initializeTables() {
     try {
@@ -691,6 +712,7 @@ async function initializeTables() {
         await initializeActivityLogTable();
         await initializeBorrowedItemsTable();
         await initializeNotificationsTable();
+        await initializeUsersTable();
         await ensureApprovedColumn();
         await initializeDefaultUsers();
         console.log('Database tables initialized');
@@ -1116,14 +1138,17 @@ app.post('/api/auth/login', async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ success: false, message: 'Username and password are required' });
         }
-        // Check credentials and approval
+        // Check credentials
         const user = await getOne('SELECT * FROM users WHERE username = ? AND password = ?', [username, password]);
         if (!user) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
-        if (!user.approved) {
+        // Only check approval status if the user has never logged in before
+        if (!user.approved && !user.last_login) {
             return res.status(403).json({ success: false, message: 'Your account is pending approval by the department head.' });
         }
+        // Update last login timestamp
+        await runQuery('UPDATE users SET last_login = datetime("now") WHERE id = ?', [user.id]);
         res.json({
             success: true,
             user: {
@@ -1150,7 +1175,8 @@ app.get('/api/auth/verify', async (req, res) => {
         if (!user) {
             return res.status(401).json({ success: false, message: 'User not found' });
         }
-        if (!user.approved) {
+        // Only check approval status if the user has never logged in before
+        if (!user.approved && !user.last_login) {
             return res.status(403).json({ success: false, message: 'Your account is pending approval by the department head.' });
         }
 
@@ -2076,10 +2102,7 @@ app.get('/api/notifications/resolved', async (req, res) => {
     }
 });
 
-app.get('*', (req, res) => {
-    const indexPath = path.join(__dirname, '..', 'static', 'index.html');
-    res.sendFile(indexPath);
-});
+
 
 // Ensure 'approved' column exists in users table
 async function ensureApprovedColumn() {
@@ -2097,6 +2120,23 @@ async function ensureApprovedColumn() {
 
 // Call on startup
 ensureApprovedColumn();
+
+// Ensure created_at column exists in users table
+async function ensureCreatedAtColumn() {
+    try {
+        const columns = await getAll("PRAGMA table_info(users)");
+        const hasCreatedAt = columns.some(col => col.name === 'created_at');
+        if (!hasCreatedAt) {
+            await runQuery('ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+            console.log("Added 'created_at' column to users table");
+        }
+    } catch (err) {
+        console.error("Error ensuring 'created_at' column:", err);
+    }
+}
+
+// Call on startup
+ensureCreatedAtColumn();
 
 // Endpoint to get all pending users
 app.get('/api/pending-users', async (req, res) => {
@@ -2134,4 +2174,9 @@ app.post('/api/reject-user', async (req, res) => {
 app.get('/debug/approve-admin', async (req, res) => {
     await runQuery('UPDATE users SET approved = 1 WHERE username = ?', ['admin']);
     res.send('Admin approved!');
+});
+
+app.get('*', (req, res) => {
+    const indexPath = path.join(__dirname, '..', 'static', 'index.html');
+    res.sendFile(indexPath);
 });
