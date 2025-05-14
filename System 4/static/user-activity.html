@@ -382,7 +382,7 @@
                 if (currentUser && currentUser.role === 'department_head') {
                     link.style.display = 'flex';
                 } else if (currentUser && currentUser.role === 'logistic_officer') {
-                    if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html'))) link.style.display = 'none';
+                    if (href && href.includes('user-approvals.html')) link.style.display = 'none';
                     else link.style.display = 'flex';
                 } else if (currentUser && currentUser.role === 'member') {
                     if (href && (href.includes('user-approvals.html') || href.includes('user-activity.html') || href.includes('supplier.html') || href.includes('notes.html'))) link.style.display = 'none';

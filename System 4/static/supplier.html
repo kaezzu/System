@@ -17,6 +17,70 @@
             background: #fff;
             transition: box-shadow 0.2s;
         }
+        /* Supplier Info Modal Polish */
+        #supplierInfoModal .bg-white {
+            max-width: 420px;
+            padding: 2rem 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0,0,0,0.18);
+            border: 1.5px solid #e5e7eb;
+        }
+        #supplierInfoModal .modal-header {
+            background: linear-gradient(90deg, #00A7E1 0%, #0474BA 100%);
+            border-radius: 1.25rem 1.25rem 0 0;
+            padding: 1.1rem 2rem 1.1rem 1.5rem;
+            margin: -2rem -2.5rem 1.5rem -2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #supplierInfoModal .modal-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #fff;
+            letter-spacing: 0.01em;
+        }
+        #supplierInfoModal .modal-close {
+            font-size: 1.7rem;
+            color: #fff;
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-radius: 9999px;
+            padding: 0.25rem 0.75rem;
+            transition: background 0.15s;
+        }
+        #supplierInfoModal .modal-close:hover {
+            background: rgba(25, 118, 210, 0.12);
+            color: #0d47a1;
+        }
+        #supplierInfoModal .info-row {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 0.4rem;
+        }
+        #supplierInfoModal .info-label {
+            font-weight: 600;
+            color: #1976d2;
+            margin-right: 0.5rem;
+            min-width: unset;
+        }
+        #supplierInfoModal .info-value {
+            color: #222;
+            font-size: 1.08rem;
+            font-weight: 500;
+            word-break: break-word;
+        }
+        @media (max-width: 600px) {
+            #supplierInfoModal .bg-white {
+                max-width: 98vw;
+                padding: 1rem;
+            }
+            #supplierInfoModal .modal-header {
+                padding: 1rem 1rem 1rem 1rem;
+                margin: -1rem -1rem 1rem -1rem;
+            }
+        }
     </style>
 
     <script>
@@ -279,11 +343,11 @@
             const userActivityLink = document.getElementById('userActivityLink');
             const addSupplierButton = document.getElementById('addSupplierButton');
             
-            if (role === 'member' || role === 'logistic_officer') {
-                // Hide user activity link for members and logistic officers
+            if (role === 'member') {
+                // Hide user activity link for members only
                 if (userActivityLink) userActivityLink.style.display = 'none';
             } else {
-                // Show for department_head and other roles
+                // Show for department_head, logistic_officer, and other roles
                 if (userActivityLink) userActivityLink.style.display = 'flex';
             }
             
@@ -403,7 +467,7 @@
 
             suppliersToDisplay.forEach(supplier => {
                 const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
+                row.className = 'hover:bg-gray-50 cursor-pointer';
                 row.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap text-center">${supplier.supplier_id}</td>
                     <td class="px-6 py-4 text-center" title="${supplier.name || ''}">${truncateText(supplier.name, 25)}</td>
@@ -432,8 +496,30 @@
                         </div>
                     </td>
                 `;
+                // Add click event to show modal, but not for the action buttons
+                row.addEventListener('click', function(e) {
+                    if (e.target.closest('button')) return; // Ignore clicks on action buttons
+                    showSupplierInfoModal(supplier);
+                });
                 tableBody.appendChild(row);
             });
+        }
+
+        // Modal for full supplier info
+        function showSupplierInfoModal(supplier) {
+            const modal = document.getElementById('supplierInfoModal');
+            document.getElementById('supplierInfoName').textContent = supplier.name || '-';
+            document.getElementById('supplierInfoContact').textContent = supplier.contact || '-';
+            document.getElementById('supplierInfoEmail').textContent = supplier.email || '-';
+            document.getElementById('supplierInfoPhone').textContent = supplier.phone || '-';
+            document.getElementById('supplierInfoAddress').textContent = supplier.address || '-';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        function closeSupplierInfoModal() {
+            const modal = document.getElementById('supplierInfoModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
         }
 
         // Search suppliers (client-side)
@@ -671,5 +757,22 @@
 
     <!-- Notification -->
     <div id="notification" class="fixed top-4 right-4 p-4 rounded-lg text-white hidden"></div>
+
+    <!-- Supplier Info Modal -->
+    <div id="supplierInfoModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white">
+            <div class="modal-header">
+                <span class="modal-title">Supplier Information</span>
+                <button onclick="closeSupplierInfoModal()" class="modal-close">&times;</button>
+            </div>
+            <div class="space-y-2">
+                <div class="info-row"><span class="info-label">Company Name:</span> <span class="info-value" id="supplierInfoName"></span></div>
+                <div class="info-row"><span class="info-label">Contact Person:</span> <span class="info-value" id="supplierInfoContact"></span></div>
+                <div class="info-row"><span class="info-label">Email:</span> <span class="info-value" id="supplierInfoEmail"></span></div>
+                <div class="info-row"><span class="info-label">Phone:</span> <span class="info-value" id="supplierInfoPhone"></span></div>
+                <div class="info-row"><span class="info-label">Address:</span> <span class="info-value" id="supplierInfoAddress"></span></div>
+            </div>
+        </div>
+    </div>
 </body>
 </html> 
