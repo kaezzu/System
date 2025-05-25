@@ -7,6 +7,33 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="shared.js"></script>
+    <style>
+        /* Add notification badge styles */
+        .notification-badge {
+            display: none;
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #ef4444;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.125rem 0.375rem;
+            border-radius: 9999px;
+            min-width: 1.25rem;
+            text-align: center;
+        }
+        
+        .notification-badge.visible {
+            display: inline-block;
+        }
+        
+        /* Add relative positioning to nav items for badge positioning */
+        nav a {
+            position: relative;
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-secondary-50">
     <script>
@@ -24,7 +51,7 @@
     <div class="flex h-screen">
         <!-- Sidebar -->
         <div class="w-64 bg-white shadow-lg">
-            <div class="h-28 flex items-center border-b border-secondary-200 px-4 pt-6 pb-6">
+            <div class="h-28 flex items-center border-b border-secondary-200 px-4 pt-6 pb-6" style="padding-top: 6px; padding-bottom: 6px;">
                 <div class="flex items-center space-x-3">
                     <div class="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center text-primary-600">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,6 +101,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
                     </svg>
                     <span>Notifications</span>
+                    <span class="notification-badge"></span>
                 </a>
                 <a href="notes.html" class="flex items-center space-x-3 px-4 py-2 text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all duration-200 hover:text-primary-600">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,7 +129,10 @@
         <div class="flex-1 overflow-auto">
             <header class="bg-white shadow-sm">
                 <div class="px-8 py-4 flex items-center justify-between">
-                    <h1 class="text-xl font-semibold text-secondary-900">User Approvals</h1>
+                    <div class="flex items-center space-x-4">
+                        <img src="img/school_logo.png" alt="School Logo" class="h-10">
+                        <h1 class="text-xl font-semibold text-secondary-900">User Approvals</h1>
+                    </div>
                 </div>
             </header>
             <main class="p-8">
@@ -222,6 +253,45 @@
             });
             fetchPendingUsers();
         }
+
+        // Add notification badge update function
+        async function updateNotificationBadge() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/notifications`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch notifications');
+                }
+                
+                const data = await response.json();
+                const notifications = data.notifications || [];
+                
+                // Count unread notifications
+                const unreadCount = notifications.filter(n => !n.read).length;
+                
+                // Update the badge
+                const badge = document.querySelector('.notification-badge');
+                if (badge) {
+                    badge.textContent = unreadCount;
+                    if (unreadCount > 0) {
+                        badge.classList.add('visible');
+                    } else {
+                        badge.classList.remove('visible');
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error updating notification badge:', error);
+            }
+        }
+
+        // Update badge periodically
+        setInterval(updateNotificationBadge, 60000); // Update every minute
+
+        // Initial badge update
+        document.addEventListener('DOMContentLoaded', function() {
+            updateNotificationBadge();
+            // ... rest of existing DOMContentLoaded code ...
+        });
     </script>
 </body>
 </html> 
