@@ -1028,10 +1028,24 @@
                 header.classList.remove(stickyClass);
             }
         });
+
+        // Hide printable list buttons for member users
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+        if (currentUser && currentUser.role === 'member') {
+            const printButtons = document.querySelectorAll('button[onclick^="showPrintableInventoryModal"]');
+            printButtons.forEach(button => {
+                button.style.display = 'none';
+            });
+        }
     });
 
     // Printable Inventory Modal Functions
     window.showPrintableInventoryModal = function(type) {
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser'));
+        if (currentUser && currentUser.role === 'member') {
+            alert('Access denied. Printable lists are not available for member users.');
+            return;
+        }
         const modal = document.getElementById('printableInventoryModal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1158,25 +1172,49 @@
     window.exportInventoryToWord = function() {
         const content = document.getElementById('printableInventoryContent').innerHTML;
         const title = document.getElementById('printableListTitle').textContent;
-        const header = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><title>' + title + '</title>';
-        header += '<style>';
-        header += 'body{font-family:Arial,sans-serif;padding:20px;}';
-        header += 'table{width:100%;border-collapse:collapse;margin-top:10px;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);}';
-        header += 'th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #e5e7eb;}';
-        header += 'th{background-color:#f9fafb;font-weight:600;text-transform:uppercase;font-size:12px;color:#6b7280;}';
-        header += 'td{font-size:14px;color:#374151;}';
-        header += 'h2{color:#111827;margin-bottom:24px;font-size:20px;font-weight:600;}';
-        header += 'h3{color:#111827;margin-top:24px;margin-bottom:12px;font-size:16px;font-weight:500;padding:0 8px;}';
-        header += 'tr:hover{background-color:#f9fafb;}';
-        header += '</style></head><body>';
+        
+        // Create a properly formatted Word document
+        const header = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+                      'xmlns:w="urn:schemas-microsoft-com:office:word" ' +
+                      'xmlns="http://www.w3.org/TR/REC-html40">' +
+                      '<head><meta charset="UTF-8">' +
+                      '<title>' + title + '</title>' +
+                      '<!--[if gte mso 9]>' +
+                      '<xml>' +
+                      '<w:WordDocument>' +
+                      '<w:View>Print</w:View>' +
+                      '<w:Zoom>90</w:Zoom>' +
+                      '<w:DoNotOptimizeForBrowser/>' +
+                      '</w:WordDocument>' +
+                      '</xml>' +
+                      '<![endif]-->' +
+                      '<style>' +
+                      '@page { size: 8.5in 11in; margin: 0.5in; }' +
+                      'body { font-family: Arial, sans-serif; }' +
+                      'table { width: 100%; border-collapse: collapse; margin: 10px 0; }' +
+                      'th, td { border: 1px solid #000; padding: 8px; text-align: left; }' +
+                      'th { background-color: #f3f4f6; }' +
+                      'h2 { color: #111827; margin-bottom: 20px; font-size: 20px; font-weight: 600; }' +
+                      'h3 { color: #111827; margin-top: 20px; margin-bottom: 10px; font-size: 16px; font-weight: 500; }' +
+                      '</style>' +
+                      '</head><body>';
+        
         const footer = '</body></html>';
+        
+        // Create the document content
         const sourceHTML = header + '<h2>' + title + '</h2>' + content + footer;
-        const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+        
+        // Create blob and download link
+        const blob = new Blob([sourceHTML], { type: 'application/msword' });
+        const url = window.URL.createObjectURL(blob);
         const fileDownload = document.createElement('a');
         document.body.appendChild(fileDownload);
-        fileDownload.href = source;
+        fileDownload.href = url;
         fileDownload.download = title.toLowerCase().replace(/\s+/g, '-') + '.doc';
         fileDownload.click();
+        
+        // Cleanup
+        window.URL.revokeObjectURL(url);
         document.body.removeChild(fileDownload);
     };
 
