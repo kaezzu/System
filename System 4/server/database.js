@@ -20,7 +20,8 @@ async function initializeDatabase() {
         // Categories table
         db.run(`CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL
+            name TEXT UNIQUE NOT NULL,
+            threshold INTEGER DEFAULT 10
         )`);
 
         
@@ -41,6 +42,28 @@ async function initializeDatabase() {
         console.log('Database initialization complete');
     });
 }
+
+// Function to ensure threshold column exists in categories table
+async function ensureThresholdColumn() {
+    try {
+        // Check if threshold column exists
+        const tableInfo = await getAll("PRAGMA table_info(categories)");
+        const hasThresholdColumn = tableInfo.some(col => col.name === 'threshold');
+        
+        if (!hasThresholdColumn) {
+            console.log('Adding threshold column to categories table');
+            await run('ALTER TABLE categories ADD COLUMN threshold INTEGER DEFAULT 10');
+        }
+    } catch (error) {
+        console.error('Error ensuring threshold column:', error);
+        throw error;
+    }
+}
+
+// Call ensureThresholdColumn after database initialization
+db.on('open', () => {
+    ensureThresholdColumn().catch(console.error);
+});
 
 // Helper function to run queries with promises
 function runQuery(query, params = []) {

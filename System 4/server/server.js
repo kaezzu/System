@@ -195,46 +195,50 @@ app.put('/api/borrowed-items/:id/return', async (req, res) => {
 // Categories endpoints
 app.get('/api/categories', async (req, res) => {
     try {
-        const categories = await getAll('SELECT * FROM categories');
+        const categories = await loadCategories();
         res.json(categories);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+        res.status(500).json({ error: 'Failed to fetch categories' });
     }
 });
 
 app.post('/api/categories', async (req, res) => {
     try {
         const { name } = req.body;
-        
-        // First check if category already exists
+        if (!name) {
+            return res.status(400).json({ error: 'Category name is required' });
+        }
+
+        // Check if category already exists
         const existingCategory = await getOne('SELECT * FROM categories WHERE name = ?', [name]);
-        
         if (existingCategory) {
-            // If category exists, return it instead of creating a new one
             return res.json({ 
-                id: existingCategory.id, 
-                name: existingCategory.name,
-                alreadyExists: true 
+                id: existingCategory.id,
+                alreadyExists: true,
+                message: 'Category already exists'
             });
         }
-        
-        // If not, create a new category
+
+        // Default threshold for new categories
+        const defaultThreshold = 10; // Default threshold for new categories
+
+        // Insert new category with default threshold
         const result = await runQuery(
-            'INSERT INTO categories (name) VALUES (?)',
-            [name]
+            'INSERT INTO categories (name, threshold) VALUES (?, ?)',
+            [name, defaultThreshold]
         );
-        
-        // Log activity
-        await runQuery(
-            `INSERT INTO activity_log (timestamp, action, details) 
-             VALUES (datetime('now'), ?, ?)`,
-            ['add_category', `Added category: ${name}`]
-        );
-        
-        res.json({ id: result.lastID, name });
-    } catch (err) {
-        console.error('Error handling category:', err);
-        res.status(500).json({ error: err.message });
+
+        res.json({ 
+            id: result.lastID,
+            name: name,
+            threshold: defaultThreshold,
+            alreadyExists: false,
+            message: 'Category added successfully'
+        });
+    } catch (error) {
+        console.error('Error adding category:', error);
+        res.status(500).json({ error: 'Failed to add category' });
     }
 });
 
@@ -394,6 +398,9 @@ app.post('/api/items', async (req, res) => {
                 [productId]
             );
 
+            // After creating the item, check its threshold
+            await checkItemThresholds(item);
+
             res.status(201).json({
                 success: true,
                 message: 'Item added successfully',
@@ -459,6 +466,9 @@ app.put('/api/items/:id', async (req, res) => {
                 [itemId]
             );
 
+            // After updating the item, check its threshold
+            await checkItemThresholds(item);
+
             if (!item) {
                 return res.status(404).json({ success: false, error: 'Item not found' });
             }
@@ -523,6 +533,12 @@ app.post('/api/items/:id/quantity/:action', async (req, res) => {
             );
 
             await runQuery('COMMIT');
+
+            // After updating quantity, check the threshold
+            const updatedItem = await getOne('SELECT * FROM items WHERE product_id = ?', [itemId]);
+            if (updatedItem) {
+                await checkItemThresholds(updatedItem);
+            }
 
             res.json({
                 success: true,
@@ -639,7 +655,7 @@ async function initializeBorrowedItemsTable() {
                 borrow_date TEXT NOT NULL,
                 due_date TEXT NOT NULL,
                 return_date TEXT,
-                status TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('Borrowed', 'Returned', 'Past Due')),
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (item_id) REFERENCES items(product_id)
             )
@@ -727,6 +743,70 @@ async function initializePasswordResetTokensTable() {
     }
 }
 
+// Ensure 'approved' column exists in users table
+async function ensureApprovedColumn() {
+    try {
+        const columns = await getAll("PRAGMA table_info(users)");
+        const hasApproved = columns.some(col => col.name === 'approved');
+        if (!hasApproved) {
+            await runQuery('ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0');
+            console.log("Added 'approved' column to users table");
+        }
+    } catch (err) {
+        console.error("Error ensuring 'approved' column:", err);
+    }
+}
+
+// Ensure created_at column exists in users table
+async function ensureCreatedAtColumn() {
+    try {
+        const columns = await getAll("PRAGMA table_info(users)");
+        const hasCreatedAt = columns.some(col => col.name === 'created_at');
+        if (!hasCreatedAt) {
+            await runQuery('ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+            console.log("Added 'created_at' column to users table");
+        }
+    } catch (err) {
+        console.error("Error ensuring 'created_at' column:", err);
+    }
+}
+
+// Ensure threshold column exists in categories table
+async function ensureThresholdColumn() {
+    try {
+        // Check if threshold column exists
+        const tableInfo = await getAll("PRAGMA table_info(categories)");
+        const hasThresholdColumn = tableInfo.some(col => col.name === 'threshold');
+        
+        if (!hasThresholdColumn) {
+            console.log('Adding threshold column to categories table');
+            await runQuery('ALTER TABLE categories ADD COLUMN threshold INTEGER DEFAULT 0');
+        }
+
+        // Set default thresholds for existing categories
+        const defaultThresholds = {
+            'Electronics': 10,
+            'Medical Supplies': 50,
+            'Communication': 20,
+            'PPE': 30,
+            'Specialized Equipment': 5
+        };
+
+        // Update each category with its default threshold
+        for (const [category, threshold] of Object.entries(defaultThresholds)) {
+            console.log(`Setting threshold for ${category} to ${threshold}`);
+            await runQuery('UPDATE categories SET threshold = ? WHERE name = ?', [threshold, category]);
+        }
+
+        // Verify the updates
+        const categories = await getAll('SELECT name, threshold FROM categories');
+        console.log('Updated category thresholds:', categories);
+    } catch (error) {
+        console.error('Error ensuring threshold column:', error);
+        throw error;
+    }
+}
+
 // Initialize tables sequentially to avoid transaction conflicts
 async function initializeTables() {
     try {
@@ -737,6 +817,8 @@ async function initializeTables() {
         await initializeUsersTable();
         await initializePasswordResetTokensTable();
         await ensureApprovedColumn();
+        await ensureCreatedAtColumn();
+        await ensureThresholdColumn();
         await initializeDefaultUsers();
         console.log('Database tables initialized');
     } catch (err) {
@@ -1041,13 +1123,21 @@ app.get('/api/notifications/check', async (req, res) => {
              AND date(due_date) > date('now')
              AND date(due_date) <= date('now', '+7 days')`
         );
+
+        // Get past due items
+        const pastDueItems = await getAll(
+            `SELECT * FROM borrowed_items
+             WHERE status != 'Returned'
+             AND date(due_date) < date('now')`
+        );
         
         // Create notifications for each condition
         const notifications = {
             lowStock: [],
             outOfStock: [],
             nearExpiration: [],
-            nearDue: []
+            nearDue: [],
+            pastDue: []
         };
         
         // Process low stock items
@@ -1104,6 +1194,32 @@ app.get('/api/notifications/check', async (req, res) => {
                 }
             );
             if (notification) notifications.nearDue.push(notification);
+        }
+
+        // Process past due items
+        for (const item of pastDueItems) {
+            // Update item status to Past Due if it's not already
+            if (item.status !== 'Past Due') {
+                await runQuery(
+                    `UPDATE borrowed_items 
+                     SET status = 'Past Due' 
+                     WHERE id = ?`,
+                    [item.id]
+                );
+            }
+
+            const notification = await createSystemNotification(
+                'past_due',
+                `Past Due Alert: ${item.item_name}`,
+                {
+                    itemName: item.item_name,
+                    dueDate: item.due_date,
+                    borrower: item.borrower_name,
+                    department: item.department,
+                    daysOverdue: Math.floor((new Date() - new Date(item.due_date)) / (1000 * 60 * 60 * 24))
+                }
+            );
+            if (notification) notifications.pastDue.push(notification);
         }
         
         res.json({
@@ -2132,42 +2248,6 @@ app.get('/api/notifications/resolved', async (req, res) => {
     }
 });
 
-
-
-// Ensure 'approved' column exists in users table
-async function ensureApprovedColumn() {
-    try {
-        const columns = await getAll("PRAGMA table_info(users)");
-        const hasApproved = columns.some(col => col.name === 'approved');
-        if (!hasApproved) {
-            await runQuery('ALTER TABLE users ADD COLUMN approved INTEGER DEFAULT 0');
-            console.log("Added 'approved' column to users table");
-        }
-    } catch (err) {
-        console.error("Error ensuring 'approved' column:", err);
-    }
-}
-
-// Call on startup
-ensureApprovedColumn();
-
-// Ensure created_at column exists in users table
-async function ensureCreatedAtColumn() {
-    try {
-        const columns = await getAll("PRAGMA table_info(users)");
-        const hasCreatedAt = columns.some(col => col.name === 'created_at');
-        if (!hasCreatedAt) {
-            await runQuery('ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
-            console.log("Added 'created_at' column to users table");
-        }
-    } catch (err) {
-        console.error("Error ensuring 'created_at' column:", err);
-    }
-}
-
-// Call on startup
-ensureCreatedAtColumn();
-
 // Endpoint to get all pending users
 app.get('/api/pending-users', async (req, res) => {
     try {
@@ -2289,5 +2369,245 @@ app.post('/api/auth/reset-password', async (req, res) => {
     } catch (err) {
         console.error('Reset password error:', err);
         res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+// Endpoint to update category threshold
+app.put('/api/categories/:name/threshold', async (req, res) => {
+    try {
+        const { name } = req.params;
+        const { threshold } = req.body;
+
+        if (typeof threshold !== 'number' || threshold < 0) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Threshold must be a positive number' 
+            });
+        }
+
+        await runQuery(
+            'UPDATE categories SET threshold = ? WHERE name = ?',
+            [threshold, name]
+        );
+
+        res.json({ 
+            success: true, 
+            message: 'Threshold updated successfully' 
+        });
+    } catch (error) {
+        console.error('Error updating category threshold:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to update threshold' 
+        });
+    }
+});
+
+// Function to check item quantities against category thresholds
+async function checkItemThresholds(item) {
+    try {
+        // Get the category threshold with more detailed logging
+        const category = await getOne('SELECT name, threshold FROM categories WHERE name = ?', [item.category]);
+        console.log('Category data for threshold check:', {
+            itemName: item.name,
+            category: item.category,
+            foundCategory: category
+        });
+        
+        if (!category) {
+            console.log(`No category found for item: ${item.name}, category: ${item.category}`);
+            return;
+        }
+
+        const currentQuantity = parseInt(item.quantity) || 0;
+        const threshold = parseInt(category.threshold) || 10; // Default to 10 if threshold is 0 or invalid
+        
+        console.log(`Threshold check details for ${item.name}:`, {
+            currentQuantity,
+            threshold,
+            category: item.category,
+            rawThreshold: category.threshold
+        });
+        
+        // If quantity is below threshold and greater than 0, create a notification
+        if (currentQuantity <= threshold && currentQuantity > 0) {
+            const unitsBelow = Math.max(0, threshold - currentQuantity); // Ensure unitsBelow is never negative
+            const notificationDetails = {
+                itemName: item.name,
+                currentQuantity: currentQuantity,
+                category: item.category,
+                threshold: threshold,
+                unitsBelow: unitsBelow
+            };
+            
+            console.log('Creating notification with details:', notificationDetails);
+            
+            await createSystemNotification(
+                'low_stock',
+                `Low Stock Alert: ${item.name}`,
+                notificationDetails
+            );
+        }
+    } catch (error) {
+        console.error('Error checking item thresholds:', error);
+    }
+}
+
+// Modify the loadCategories function to include threshold
+async function loadCategories() {
+    try {
+        const categories = await getAll('SELECT name, threshold FROM categories');
+        return categories;
+    } catch (error) {
+        console.error('Error loading categories:', error);
+        return [];
+    }
+}
+
+// Add this function to check and update thresholds
+async function updateCategoryThresholds() {
+    try {
+        const defaultThresholds = {
+            'Electronics': 10,
+            'Medical Supplies': 50,
+            'Communication': 20,
+            'PPE': 30,
+            'Specialized Equipment': 5
+        };
+
+        // First, let's check current values
+        const currentCategories = await getAll('SELECT name, threshold FROM categories');
+        console.log('Current category thresholds:', currentCategories);
+
+        // Update each category with its default threshold
+        for (const [category, threshold] of Object.entries(defaultThresholds)) {
+            console.log(`Updating threshold for ${category} to ${threshold}`);
+            await runQuery('UPDATE categories SET threshold = ? WHERE name = ?', [threshold, category]);
+        }
+
+        // Verify the updates
+        const updatedCategories = await getAll('SELECT name, threshold FROM categories');
+        console.log('Updated category thresholds:', updatedCategories);
+    } catch (error) {
+        console.error('Error updating category thresholds:', error);
+    }
+}
+
+// Modify checkItemThresholds function to add more debugging
+async function checkItemThresholds(item) {
+    try {
+        // Get the category threshold with more detailed logging
+        const category = await getOne('SELECT name, threshold FROM categories WHERE name = ?', [item.category]);
+        console.log('Category data for threshold check:', {
+            itemName: item.name,
+            category: item.category,
+            foundCategory: category
+        });
+        
+        if (!category) {
+            console.log(`No category found for item: ${item.name}, category: ${item.category}`);
+            return;
+        }
+
+        const currentQuantity = parseInt(item.quantity) || 0;
+        const threshold = parseInt(category.threshold) || 10; // Default to 10 if threshold is 0 or invalid
+        
+        console.log(`Threshold check details for ${item.name}:`, {
+            currentQuantity,
+            threshold,
+            category: item.category,
+            rawThreshold: category.threshold
+        });
+        
+        // If quantity is below threshold and greater than 0, create a notification
+        if (currentQuantity <= threshold && currentQuantity > 0) {
+            const unitsBelow = Math.max(0, threshold - currentQuantity); // Ensure unitsBelow is never negative
+            const notificationDetails = {
+                itemName: item.name,
+                currentQuantity: currentQuantity,
+                category: item.category,
+                threshold: threshold,
+                unitsBelow: unitsBelow
+            };
+            
+            console.log('Creating notification with details:', notificationDetails);
+            
+            await createSystemNotification(
+                'low_stock',
+                `Low Stock Alert: ${item.name}`,
+                notificationDetails
+            );
+        }
+    } catch (error) {
+        console.error('Error checking item thresholds:', error);
+    }
+}
+
+// Add this to your initializeTables function
+async function initializeTables() {
+    try {
+        // ... existing initialization code ...
+        
+        // Add this line after other table initializations
+        await updateCategoryThresholds();
+        
+        // ... rest of the initialization code ...
+    } catch (error) {
+        console.error('Error initializing tables:', error);
+        throw error;
+    }
+}
+
+// Add a new endpoint to manually update thresholds
+app.post('/api/categories/update-thresholds', async (req, res) => {
+    try {
+        await updateCategoryThresholds();
+        res.json({ success: true, message: 'Category thresholds updated successfully' });
+    } catch (error) {
+        console.error('Error updating thresholds:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Add endpoint for updating a single category's threshold
+app.put('/api/categories/:name/threshold', async (req, res) => {
+    try {
+        const { name } = req.params;
+        const { threshold } = req.body;
+
+        if (!threshold || threshold < 0) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Threshold must be a positive number' 
+            });
+        }
+
+        await runQuery('UPDATE categories SET threshold = ? WHERE name = ?', [threshold, name]);
+        
+        res.json({ 
+            success: true, 
+            message: `Threshold updated for ${name}`,
+            threshold: threshold
+        });
+    } catch (error) {
+        console.error('Error updating threshold:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Add endpoint to get low stock items with thresholds
+app.get('/api/items/low-stock', async (req, res) => {
+    try {
+        const items = await getAll(`
+            SELECT i.*, c.threshold 
+            FROM items i 
+            LEFT JOIN categories c ON i.category = c.name 
+            WHERE i.quantity > 0
+        `);
+        
+        res.json(items);
+    } catch (error) {
+        console.error('Error getting low stock items:', error);
+        res.status(500).json({ error: 'Failed to get low stock items' });
     }
 });

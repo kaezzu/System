@@ -29,8 +29,11 @@ async function checkLowStock() {
     try {
         const response = await fetch(`${API_BASE_URL}/items/low-stock`);
         const items = await response.json();
-        const lowStockThreshold = 20;
-        return items.filter(item => parseInt(item.quantity) <= lowStockThreshold);
+        return items.filter(item => {
+            const quantity = parseInt(item.quantity) || 0;
+            const threshold = parseInt(item.threshold) || 10; // Default to 10 if threshold is not set
+            return quantity <= threshold && quantity > 0;
+        });
     } catch (err) {
         console.error('Error checking low stock:', err);
         return [];
@@ -88,8 +91,13 @@ async function createNotification(type, message, details = {}) {
 // Function to update notification badge count
 async function updateNotificationBadge() {
     try {
-        const response = await fetch(`${API_BASE_URL}/notifications`);
-        const notifications = await response.json();
+        const response = await fetch(`${API_BASE_URL}/api/notifications/unread`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch notifications');
+        }
+        
+        const data = await response.json();
+        const notifications = Array.isArray(data) ? data : [];
         const unreadCount = notifications.filter(n => !n.read).length;
         
         // Update all notification badges in the document
@@ -102,8 +110,8 @@ async function updateNotificationBadge() {
                 badge.classList.remove('visible');
             }
         });
-    } catch (err) {
-        console.error('Error updating notification badge:', err);
+    } catch (error) {
+        console.error('Error updating notification badge:', error);
     }
 }
 

@@ -125,6 +125,17 @@
             color: #1e40af;
         }
         
+        .notification-type.past_due {
+            background-color: #fee2e2;
+            color: #dc2626;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
         .notification-time {
             font-size: 12px;
             color: #6b7280;
@@ -520,11 +531,17 @@
                         
                         let detailsHtml = '';
                         if (notification.type === 'low_stock') {
+                            const currentQuantity = parseInt(notification.details.currentQuantity) || 0;
+                            const threshold = parseInt(notification.details.threshold) || 10; // Default to 10 if not set
+                            const unitsBelow = Math.max(0, threshold - currentQuantity);
+                            
                             detailsHtml = `
                                 <div class="notification-details">
                                     <p>Item: ${notification.details.itemName}</p>
-                                    <p>Current Quantity: ${notification.details.currentQuantity}</p>
+                                    <p>Current Quantity: ${currentQuantity}</p>
                                     <p>Category: ${notification.details.category}</p>
+                                    <p class="text-red-600 font-medium">Category Threshold: ${threshold}</p>
+                                    <p class="text-red-600">${currentQuantity} units remaining (${unitsBelow} units below threshold)</p>
                                 </div>
                             `;
                         } else if (notification.type === 'out_of_stock') {
@@ -552,6 +569,16 @@
                                     <p>Department: ${notification.details.department}</p>
                                 </div>
                             `;
+                        } else if (notification.type === 'past_due') {
+                            detailsHtml = `
+                                <div class="notification-details">
+                                    <p>Item: ${notification.details.itemName}</p>
+                                    <p>Due Date: ${notification.details.dueDate}</p>
+                                    <p>Borrower: ${notification.details.borrower}</p>
+                                    <p>Department: ${notification.details.department}</p>
+                                    <p>Days Overdue: ${notification.details.daysOverdue}</p>
+                                </div>
+                            `;
                         }
 
                         notificationElement.innerHTML = `
@@ -561,6 +588,7 @@
                                                                                         notification.type === 'out_of_stock' ? 'Out of Stock' : 
                                                                                         notification.type === 'near_expiration' ? 'Near Expiration' :
                                                                                         notification.type === 'near_due_date' ? 'Near Due Date' :
+                                                                                        notification.type === 'past_due' ? 'Past Due' :
                                                                                         notification.type}</span>
                                     <span class="notification-time">${new Date(notification.timestamp).toLocaleString()}</span>
                                 </div>
