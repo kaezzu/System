@@ -986,11 +986,11 @@
     });
 
     // Printable Inventory Modal Functions
-    window.showPrintableInventoryModal = function() {
+    window.showPrintableInventoryModal = function(type) {
         const modal = document.getElementById('printableInventoryModal');
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        populatePrintableInventory();
+        populatePrintableInventory(type);
     };
 
     window.closePrintableInventoryModal = function() {
@@ -999,36 +999,109 @@
         modal.classList.remove('flex');
     };
 
-    function populatePrintableInventory() {
+    function populatePrintableInventory(type) {
         const content = document.getElementById('printableInventoryContent');
+        const title = document.getElementById('printableListTitle');
         if (!content) return;
+
+        // Set title based on type
+        switch(type) {
+            case 'low-stock':
+                title.textContent = 'Low Stock Items List';
+                break;
+            case 'expiration':
+                title.textContent = 'Near Expiration Items List';
+                break;
+            default:
+                title.textContent = 'All Inventory Items List';
+        }
+
+        // Get items based on type
+        let items = window.allInventoryItems;
+        if (type === 'low-stock') {
+            items = items.filter(item => 
+                parseInt(item.quantity) <= 20 && 
+                parseInt(item.quantity) > 0 &&
+                item.status !== 'Out of Stock'
+            );
+        } else if (type === 'expiration') {
+            const today = new Date();
+            const warningDate = new Date();
+            warningDate.setDate(today.getDate() + 30); // 30 days warning
+            
+            items = items.filter(item => {
+                if (!item.expiration_date) return false;
+                const expirationDate = new Date(item.expiration_date);
+                return expirationDate > today && expirationDate <= warningDate;
+            });
+        }
+
         // Group items by category
         const itemsByCategory = {};
-        window.allInventoryItems.forEach(item => {
+        items.forEach(item => {
             const cat = item.category || 'Uncategorized';
             if (!itemsByCategory[cat]) itemsByCategory[cat] = [];
             itemsByCategory[cat].push(item);
         });
-        let html = '';
+
+        let html = '<div class="overflow-x-auto">';
         Object.keys(itemsByCategory).sort().forEach(category => {
-            html += `<h3 style="margin-top:1.5em;font-size:1.1em;font-weight:bold;">${category}</h3>`;
-            html += '<table style="width:100%;border-collapse:collapse;margin-bottom:1em;">';
-            html += '<tr style="background:#f3f4f6;"><th style="border:1px solid #ddd;padding:4px;text-align:left;">Name</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Status</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Availability</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Quantity</th><th style="border:1px solid #ddd;padding:4px;text-align:left;">Expiration Date</th></tr>';
+            html += `<h3 class="text-base font-medium text-gray-900 mt-6 mb-3 px-2">${category}</h3>`;
+            html += '<table class="min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden shadow-sm">';
+            html += '<thead class="bg-gray-50">';
+            html += '<tr>';
+            html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>';
+            html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>';
+            html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Availability</th>';
+            html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>';
+            if (type === 'expiration' || type === 'all') {
+                html += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiration Date</th>';
+            }
+            html += '</tr>';
+            html += '</thead>';
+            html += '<tbody class="bg-white divide-y divide-gray-200">';
+            
             itemsByCategory[category].forEach(item => {
-                html += `<tr><td style="border:1px solid #ddd;padding:4px;">${item.name}</td><td style="border:1px solid #ddd;padding:4px;">${item.status || ''}</td><td style="border:1px solid #ddd;padding:4px;">${item.availability || ''}</td><td style="border:1px solid #ddd;padding:4px;">${item.quantity || 0}</td><td style="border:1px solid #ddd;padding:4px;">${item.expiration_date || ''}</td></tr>`;
+                html += '<tr class="hover:bg-gray-50 transition-colors duration-150">';
+                html += `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${item.name}</td>`;
+                html += `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.status || '-'}</td>`;
+                html += `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.availability || '-'}</td>`;
+                html += `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${item.quantity || 0}</td>`;
+                if (type === 'expiration' || type === 'all') {
+                    html += `<td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.expiration_date || '-'}</td>`;
+                }
+                html += '</tr>';
             });
+            
+            html += '</tbody>';
             html += '</table>';
         });
+        html += '</div>';
+
+        if (items.length === 0) {
+            html = '<div class="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">No items found in this category.</div>';
+        }
+
         content.innerHTML = html;
     }
 
     window.printInventoryList = function() {
         const printContents = document.getElementById('printableInventoryContent').innerHTML;
+        const title = document.getElementById('printableListTitle').textContent;
         const printWindow = window.open('', '', 'height=700,width=900');
-        printWindow.document.write('<html><head><title>Printable Inventory List</title>');
-        printWindow.document.write('<style>body{font-family:Arial,sans-serif;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:4px;}th{background:#f3f4f6;}</style>');
-        printWindow.document.write('</head><body >');
-        printWindow.document.write('<h2>Inventory List</h2>');
+        printWindow.document.write('<html><head><title>' + title + '</title>');
+        printWindow.document.write('<style>');
+        printWindow.document.write('body{font-family:Arial,sans-serif;padding:20px;}');
+        printWindow.document.write('table{width:100%;border-collapse:collapse;margin-top:10px;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);}');
+        printWindow.document.write('th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #e5e7eb;}');
+        printWindow.document.write('th{background-color:#f9fafb;font-weight:600;text-transform:uppercase;font-size:12px;color:#6b7280;}');
+        printWindow.document.write('td{font-size:14px;color:#374151;}');
+        printWindow.document.write('h2{color:#111827;margin-bottom:24px;font-size:20px;font-weight:600;}');
+        printWindow.document.write('h3{color:#111827;margin-top:24px;margin-bottom:12px;font-size:16px;font-weight:500;padding:0 8px;}');
+        printWindow.document.write('tr:hover{background-color:#f9fafb;}');
+        printWindow.document.write('</style>');
+        printWindow.document.write('</head><body>');
+        printWindow.document.write('<h2>' + title + '</h2>');
         printWindow.document.write(printContents);
         printWindow.document.write('</body></html>');
         printWindow.document.close();
@@ -1039,14 +1112,25 @@
 
     window.exportInventoryToWord = function() {
         const content = document.getElementById('printableInventoryContent').innerHTML;
-        const header = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><title>Inventory List</title></head><body>';
+        const title = document.getElementById('printableListTitle').textContent;
+        const header = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><title>' + title + '</title>';
+        header += '<style>';
+        header += 'body{font-family:Arial,sans-serif;padding:20px;}';
+        header += 'table{width:100%;border-collapse:collapse;margin-top:10px;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);}';
+        header += 'th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #e5e7eb;}';
+        header += 'th{background-color:#f9fafb;font-weight:600;text-transform:uppercase;font-size:12px;color:#6b7280;}';
+        header += 'td{font-size:14px;color:#374151;}';
+        header += 'h2{color:#111827;margin-bottom:24px;font-size:20px;font-weight:600;}';
+        header += 'h3{color:#111827;margin-top:24px;margin-bottom:12px;font-size:16px;font-weight:500;padding:0 8px;}';
+        header += 'tr:hover{background-color:#f9fafb;}';
+        header += '</style></head><body>';
         const footer = '</body></html>';
-        const sourceHTML = header + '<h2>Inventory List</h2>' + content + footer;
+        const sourceHTML = header + '<h2>' + title + '</h2>' + content + footer;
         const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
         const fileDownload = document.createElement('a');
         document.body.appendChild(fileDownload);
         fileDownload.href = source;
-        fileDownload.download = 'inventory-list.doc';
+        fileDownload.download = title.toLowerCase().replace(/\s+/g, '-') + '.doc';
         fileDownload.click();
         document.body.removeChild(fileDownload);
     };
@@ -1192,11 +1276,21 @@
                 <!-- Controls -->
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                     <div class="flex flex-col gap-4">
-                        <button onclick="showPrintableInventoryModal()" class="btn-secondary flex items-center space-x-2">
-                            <span>🗒️</span>
-                            <span>Printable Inventory List</span>
-                        </button>
-                        <button onclick="showAddItemModal()" class="btn-primary flex items-center space-x-2">
+                        <div class="flex flex-col md:flex-row gap-4">
+                            <button onclick="showPrintableInventoryModal('all')" class="btn-secondary flex items-center space-x-2 px-4 py-2 rounded-lg border border-secondary-200 hover:bg-secondary-50 transition-colors duration-200">
+                                <span>🗒️</span>
+                                <span>All Items</span>
+                            </button>
+                            <button onclick="showPrintableInventoryModal('low-stock')" class="btn-secondary flex items-center space-x-2 px-4 py-2 rounded-lg border border-secondary-200 hover:bg-secondary-50 transition-colors duration-200">
+                                <span>📊</span>
+                                <span>Low Stock</span>
+                            </button>
+                            <button onclick="showPrintableInventoryModal('expiration')" class="btn-secondary flex items-center space-x-2 px-4 py-2 rounded-lg border border-secondary-200 hover:bg-secondary-50 transition-colors duration-200">
+                                <span>📅</span>
+                                <span>Near Expiration</span>
+                            </button>
+                        </div>
+                        <button onclick="showAddItemModal()" class="btn-primary flex items-center space-x-2 px-3 py-1.5 rounded-lg w-fit">
                             <span>+</span>
                             <span>Add New Item</span>
                         </button>
@@ -1344,16 +1438,32 @@
 
     <!-- Printable Inventory Modal -->
     <div id="printableInventoryModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto relative">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-semibold text-secondary-900">Printable Inventory List</h2>
-                <button onclick="closePrintableInventoryModal()" class="text-secondary-500 hover:text-secondary-700">&times;</button>
+        <div class="bg-white rounded-lg p-4 w-full max-w-2xl max-h-[80vh] overflow-auto relative">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg font-semibold text-secondary-900" id="printableListTitle">Printable List</h2>
+                <button onclick="closePrintableInventoryModal()" class="text-secondary-500 hover:text-secondary-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
             </div>
-            <div id="printableInventoryContent" class="mb-4">
+            <div id="printableInventoryContent" class="mb-3 text-sm">
                 <!-- Inventory list will be populated here -->
             </div>
-            <button onclick="printInventoryList()" class="btn-primary w-full mb-2">Print</button>
-            <button onclick="exportInventoryToWord()" class="btn-secondary w-full">Export to Word</button>
+            <div class="flex gap-2">
+                <button onclick="printInventoryList()" class="btn-primary flex-1 flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                    </svg>
+                    Print
+                </button>
+                <button onclick="exportInventoryToWord()" class="btn-secondary flex-1 flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    Export to Word
+                </button>
+            </div>
         </div>
     </div>
 </body>

@@ -47,19 +47,19 @@
         // Function to get action color
         function getActionColor(action) {
             const colors = {
-                add_item: 'bg-green-100 text-green-800',
-                edit_item: 'bg-blue-100 text-blue-800',
-                delete_item: 'bg-red-100 text-red-800',
-                update_quantity: 'bg-purple-100 text-purple-800',
-                add_supplier: 'bg-yellow-100 text-yellow-800',
-                edit_supplier: 'bg-indigo-100 text-indigo-800',
-                delete_supplier: 'bg-pink-100 text-pink-800',
-                user_login: 'bg-teal-100 text-teal-800',
-                user_logout: 'bg-gray-100 text-gray-800',
-                add_note: 'bg-blue-100 text-blue-800',
-                edit_note: 'bg-yellow-100 text-yellow-800',
-                delete_note: 'bg-red-100 text-red-800',
-                default: 'bg-gray-100 text-gray-800'
+                add_item: 'bg-green-50 text-green-700 border border-green-200',
+                edit_item: 'bg-blue-50 text-blue-700 border border-blue-200',
+                delete_item: 'bg-red-50 text-red-700 border border-red-200',
+                update_quantity: 'bg-purple-50 text-purple-700 border border-purple-200',
+                add_supplier: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+                edit_supplier: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+                delete_supplier: 'bg-pink-50 text-pink-700 border border-pink-200',
+                user_login: 'bg-teal-50 text-teal-700 border border-teal-200',
+                user_logout: 'bg-gray-50 text-gray-700 border border-gray-200',
+                add_note: 'bg-blue-50 text-blue-700 border border-blue-200',
+                edit_note: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+                delete_note: 'bg-red-50 text-red-700 border border-red-200',
+                default: 'bg-gray-50 text-gray-700 border border-gray-200'
             };
             return colors[action] || colors.default;
         }
@@ -89,8 +89,11 @@
 
             if (activities.length === 0) {
                 activityList.innerHTML = `
-                    <div class="p-8 text-center text-gray-500">
-                        <p class="font-medium">No activities found</p>
+                    <div class="p-8 text-center text-gray-500 bg-white rounded-lg shadow-sm">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <p class="mt-2 font-medium">No activities found</p>
                         <p class="mt-1 text-sm">Try adjusting your search or filters</p>
                     </div>
                 `;
@@ -100,24 +103,81 @@
             activities.forEach(activity => {
                 const actionColor = getActionColor(activity.action);
                 const div = document.createElement('div');
-                div.className = 'bg-white p-4 hover:bg-gray-50 transition-colors duration-150';
+                div.className = 'bg-white p-4 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 mb-3 border border-gray-100';
+                let detailsHtml = '';
+                if (activity.action === 'add_item') {
+                    // More robust extraction for item, quantity, expiration
+                    let item = '', quantity = '', expiration = '';
+                    // Try to extract item
+                    const itemMatch = activity.details.match(/item: ([^,]+)/i);
+                    if (itemMatch) item = itemMatch[1].trim();
+                    // Try to extract quantity
+                    const qtyMatch = activity.details.match(/quantity: (\d+)/i);
+                    if (qtyMatch) quantity = qtyMatch[1].trim();
+                    // Try to extract expiration (optional)
+                    const expMatch = activity.details.match(/expiration: ([^,\s]+)/i);
+                    if (expMatch) expiration = expMatch[1].trim();
+                    // Only use new format if at least item and quantity are found
+                    if (item && quantity) {
+                        detailsHtml = `
+                            <div class="space-y-1 text-sm text-gray-700 leading-relaxed">
+                                <div><span class="font-medium">Item:</span> <span>${item}</span></div>
+                                <div><span class="font-medium">Quantity:</span> <span>${quantity}</span></div>
+                                <div><span class="font-medium">Expiration Date:</span> <span>${expiration}</span></div>
+                            </div>
+                        `;
+                    } else {
+                        detailsHtml = `<p class="text-sm text-gray-700 leading-relaxed">${activity.details}</p>`;
+                    }
+                } else {
+                    detailsHtml = `<p class="text-sm text-gray-700 leading-relaxed">${activity.details}</p>`;
+                }
                 div.innerHTML = `
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center space-x-2">
-                            <span class="px-2 py-1 text-xs font-medium rounded-full ${actionColor}">
-                                ${formatAction(activity.action)}
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center space-x-2"></div>
+                            <span class="text-sm text-gray-500 font-medium flex items-center">
+                                <svg class="w-4 h-4 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                ${formatTimestamp(activity.timestamp)}
                             </span>
-                            <span class="text-sm text-gray-500">${formatTimestamp(activity.timestamp)}</span>
                         </div>
                     </div>
-                    <p class="text-sm text-gray-700">${activity.details}</p>
-                    <div class="mt-2 text-xs text-gray-500">
-                        By ${activity.full_name || activity.username || 'System'}
-                        ${activity.metadata ? formatMetadata(activity.metadata) : ''}
+                    <div class="pl-1">
+                        <div class='font-bold mb-1'>${formatAction(activity.action)}</div>
+                        ${detailsHtml}
+                        <div class="mt-3 flex items-center text-xs text-gray-500">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            <span>${activity.full_name || activity.username || 'System'}</span>
+                            ${activity.metadata ? formatMetadata(activity.metadata) : ''}
+                        </div>
                     </div>
                 `;
                 activityList.appendChild(div);
             });
+        }
+
+        // Function to get action icon
+        function getActionIcon(action) {
+            const icons = {
+                add_item: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>',
+                edit_item: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>',
+                delete_item: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>',
+                update_quantity: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>',
+                add_supplier: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>',
+                edit_supplier: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>',
+                delete_supplier: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>',
+                user_login: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>',
+                user_logout: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>',
+                add_note: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>',
+                edit_note: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>',
+                delete_note: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>',
+                default: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'
+            };
+            return icons[action] || icons.default;
         }
 
         // Function to format metadata
@@ -126,15 +186,18 @@
             
             try {
                 const meta = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-                let html = '<div class="mt-2 space-y-1">';
+                let html = '<div class="mt-3 pl-5 border-l-2 border-gray-100 space-y-2">';
 
                 if (meta.changes) {
                     html += '<div class="font-medium text-xs text-gray-600">Changes:</div>';
                     for (const [key, value] of Object.entries(meta.changes)) {
                         html += `
-                            <div class="ml-2 text-xs">
-                                <span class="font-medium">${key}:</span> 
-                                <span class="line-through text-red-500">${value.from || 'none'}</span> → 
+                            <div class="text-xs flex items-center space-x-2">
+                                <span class="font-medium text-gray-600">${key}:</span> 
+                                <span class="line-through text-red-500">${value.from || 'none'}</span>
+                                <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                                </svg>
                                 <span class="text-green-500">${value.to || 'none'}</span>
                             </div>
                         `;
@@ -144,9 +207,9 @@
                 if (meta.quantity_change) {
                     const change = parseInt(meta.quantity_change);
                     html += `
-                        <div class="text-xs">
-                            Quantity change: 
-                            <span class="${change > 0 ? 'text-green-500' : 'text-red-500'}">
+                        <div class="text-xs flex items-center space-x-2">
+                            <span class="font-medium text-gray-600">Quantity change:</span>
+                            <span class="${change > 0 ? 'text-green-500' : 'text-red-500'} font-medium">
                                 ${change > 0 ? '+' : ''}${change}
                             </span>
                         </div>
@@ -224,25 +287,25 @@
             const endItem = Math.min(currentPage * rowsPerPage, totalItems);
 
             paginationContainer.innerHTML = `
-                <div class="flex flex-col space-y-4 items-center">
+                <div class="flex flex-col space-y-4 items-center bg-white p-4 rounded-lg shadow-sm">
                     <div class="flex items-center space-x-2">
-                        <span class="text-sm text-gray-700">
-                            Showing ${startItem} to ${endItem} of ${totalItems}
+                        <span class="text-sm text-gray-700 font-medium">
+                            Showing ${startItem} to ${endItem} of ${totalItems} activities
                         </span>
                     </div>
-                    <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-3">
                         <button onclick="changePage('prev')" 
-                                class="p-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+                                class="p-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 shadow-sm"
                                 ${!hasPrevPage ? 'disabled' : ''}>
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                             </svg>
                         </button>
-                        <span class="px-3 py-1 text-sm font-medium text-primary-600 bg-primary-50 rounded-md">
+                        <span class="px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-md shadow-sm">
                             Page ${currentPage} of ${totalPages}
                         </span>
                         <button onclick="changePage('next')" 
-                                class="p-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+                                class="p-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150 shadow-sm"
                                 ${!hasNextPage ? 'disabled' : ''}>
                             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
