@@ -777,33 +777,14 @@ async function ensureThresholdColumn() {
         // Check if threshold column exists
         const tableInfo = await getAll("PRAGMA table_info(categories)");
         const hasThresholdColumn = tableInfo.some(col => col.name === 'threshold');
-        
+
         if (!hasThresholdColumn) {
-            console.log('Adding threshold column to categories table');
-            await runQuery('ALTER TABLE categories ADD COLUMN threshold INTEGER DEFAULT 0');
+            // Add threshold column with default value of 20
+            await runQuery('ALTER TABLE categories ADD COLUMN threshold INTEGER DEFAULT 20');
+            console.log('Added threshold column to categories table');
         }
-
-        // Set default thresholds for existing categories
-        const defaultThresholds = {
-            'Electronics': 10,
-            'Medical Supplies': 50,
-            'Communication': 20,
-            'PPE': 30,
-            'Specialized Equipment': 5
-        };
-
-        // Update each category with its default threshold
-        for (const [category, threshold] of Object.entries(defaultThresholds)) {
-            console.log(`Setting threshold for ${category} to ${threshold}`);
-            await runQuery('UPDATE categories SET threshold = ? WHERE name = ?', [threshold, category]);
-        }
-
-        // Verify the updates
-        const categories = await getAll('SELECT name, threshold FROM categories');
-        console.log('Updated category thresholds:', categories);
     } catch (error) {
         console.error('Error ensuring threshold column:', error);
-        throw error;
     }
 }
 
@@ -821,8 +802,9 @@ async function initializeTables() {
         await ensureThresholdColumn();
         await initializeDefaultUsers();
         console.log('Database tables initialized');
-    } catch (err) {
-        console.error('Error during table initialization:', err);
+    } catch (error) {
+        console.error('Error initializing tables:', error);
+        throw error;
     }
 }
 
@@ -1098,10 +1080,15 @@ app.put('/api/notifications/read-all', async (req, res) => {
 // Auto-notification endpoints for system checks
 app.get('/api/notifications/check', async (req, res) => {
     try {
-        // Get low stock items (under 20 units)
-        const lowStockItems = await getAll(
-            `SELECT * FROM items WHERE quantity <= 20 AND quantity > 0 AND status != 'Out of Stock'`
-        );
+        // Get low stock items based on category thresholds
+        const lowStockItems = await getAll(`
+            SELECT i.*, c.threshold 
+            FROM items i 
+            LEFT JOIN categories c ON i.category = c.name 
+            WHERE i.quantity > 0 
+            AND i.status != 'Out of Stock'
+            AND i.quantity <= COALESCE(c.threshold, 10)
+        `);
         
         // Get out of stock items
         const outOfStockItems = await getAll(
@@ -1148,7 +1135,8 @@ app.get('/api/notifications/check', async (req, res) => {
                 {
                     itemName: item.name,
                     currentQuantity: item.quantity,
-                    category: item.category
+                    category: item.category,
+                    threshold: parseInt(item.threshold) || 10
                 }
             );
             if (notification) notifications.lowStock.push(notification);
@@ -1235,6 +1223,17 @@ app.get('/api/notifications/check', async (req, res) => {
 // Helper function to create system notifications without duplicates
 async function createSystemNotification(type, message, details) {
     try {
+        // For low stock notifications, ensure we include the threshold
+        if (type === 'low_stock' && details.itemName) {
+            const item = await getOne(
+                'SELECT i.*, c.threshold FROM items i LEFT JOIN categories c ON i.category = c.name WHERE i.name = ?',
+                [details.itemName]
+            );
+            if (item) {
+                details.threshold = parseInt(item.threshold) || 10;
+            }
+        }
+
         // Check if a similar unread notification already exists
         const existingSimilar = await getOne(
             `SELECT id FROM notifications 
@@ -2464,35 +2463,6 @@ async function loadCategories() {
     }
 }
 
-// Add this function to check and update thresholds
-async function updateCategoryThresholds() {
-    try {
-        const defaultThresholds = {
-            'Electronics': 10,
-            'Medical Supplies': 50,
-            'Communication': 20,
-            'PPE': 30,
-            'Specialized Equipment': 5
-        };
-
-        // First, let's check current values
-        const currentCategories = await getAll('SELECT name, threshold FROM categories');
-        console.log('Current category thresholds:', currentCategories);
-
-        // Update each category with its default threshold
-        for (const [category, threshold] of Object.entries(defaultThresholds)) {
-            console.log(`Updating threshold for ${category} to ${threshold}`);
-            await runQuery('UPDATE categories SET threshold = ? WHERE name = ?', [threshold, category]);
-        }
-
-        // Verify the updates
-        const updatedCategories = await getAll('SELECT name, threshold FROM categories');
-        console.log('Updated category thresholds:', updatedCategories);
-    } catch (error) {
-        console.error('Error updating category thresholds:', error);
-    }
-}
-
 // Modify checkItemThresholds function to add more debugging
 async function checkItemThresholds(item) {
     try {
@@ -2546,12 +2516,17 @@ async function checkItemThresholds(item) {
 // Add this to your initializeTables function
 async function initializeTables() {
     try {
-        // ... existing initialization code ...
-        
-        // Add this line after other table initializations
-        await updateCategoryThresholds();
-        
-        // ... rest of the initialization code ...
+        await initializeNotesTable();
+        await initializeActivityLogTable();
+        await initializeBorrowedItemsTable();
+        await initializeNotificationsTable();
+        await initializeUsersTable();
+        await initializePasswordResetTokensTable();
+        await ensureApprovedColumn();
+        await ensureCreatedAtColumn();
+        await ensureThresholdColumn();
+        await initializeDefaultUsers();
+        console.log('Database tables initialized');
     } catch (error) {
         console.error('Error initializing tables:', error);
         throw error;

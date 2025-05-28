@@ -559,7 +559,7 @@
                         let detailsHtml = '';
                         if (notification.type === 'low_stock') {
                             const currentQuantity = parseInt(notification.details.currentQuantity) || 0;
-                            const threshold = parseInt(notification.details.threshold) || 10; // Default to 10 if not set
+                            const threshold = parseInt(notification.details.threshold) || 10; // Use the threshold from notification details
                             const unitsBelow = Math.max(0, threshold - currentQuantity);
                             
                             detailsHtml = `
